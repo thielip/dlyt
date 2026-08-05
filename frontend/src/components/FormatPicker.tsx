@@ -52,8 +52,12 @@ function FormatOption({
             </span>
           </span>
           <span className="mt-0.5 block text-sm text-[var(--muted)]">
-            {format.hasVideo ? format.resolution : "僅音訊 · AAC"}
-            {format.progressive ? " · 不經伺服器流量" : ""}
+            {format.hasVideo
+              ? format.resolution
+              : format.ext === "mp3"
+                ? "最高音質 MP3 · 經伺服器轉檔"
+                : "僅音訊"}
+            {format.hasVideo && format.progressive ? " · 不經伺服器流量" : ""}
           </span>
         </span>
       </span>

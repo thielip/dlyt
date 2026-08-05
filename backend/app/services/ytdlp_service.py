@@ -63,6 +63,15 @@ _JS_CLIENTS = frozenset(
     }
 )
 
+# Sentinel format id: best audio → ffmpeg → highest-quality MP3 (never 直連).
+AUDIO_MP3_FORMAT_ID = "audio-mp3"
+
+
+def is_audio_mp3_format(format_id: str | None) -> bool:
+    fid = (format_id or "").strip()
+    return fid == AUDIO_MP3_FORMAT_ID or fid in {"bestaudio", "bestaudio/b"}
+
+
 PREFERRED_HEIGHTS = (360, 480, 720, 1080)
 ADVANCED_MP4_HEIGHTS = (720, 1080, 2160)
 
@@ -394,34 +403,27 @@ def _collect_formats(
         if item:
             collected.append(item)
 
+    # YouTube never serves MP3. Always download bestaudio and convert with
+    # ffmpeg to highest-quality MP3 (preferredquality=0). Counts as proxy egress.
+    abr = best_audio.get("abr") if best_audio else None
+    size_hint = None
     if best_audio:
-        best = best_audio
-        filesize = best.get("filesize") or best.get("filesize_approx")
-        collected.append(
-            VideoFormat(
-                formatId=str(best["format_id"]),
-                label="僅音訊 · 直連",
-                resolution="audio",
-                ext=best.get("ext") or "m4a",
-                filesizeApprox=int(filesize) if filesize else None,
-                hasAudio=True,
-                hasVideo=False,
-                progressive=True,
-            )
+        size_hint = best_audio.get("filesize") or best_audio.get("filesize_approx")
+    label = "僅音訊 · MP3 · 最高音質"
+    if abr:
+        label = f"僅音訊 · MP3 · 最高音質（來源約 {int(abr)} kbps）"
+    collected.append(
+        VideoFormat(
+            formatId=AUDIO_MP3_FORMAT_ID,
+            label=label,
+            resolution="audio",
+            ext="mp3",
+            filesizeApprox=int(size_hint) if size_hint else None,
+            hasAudio=True,
+            hasVideo=False,
+            progressive=False,
         )
-    elif not any(not f.hasVideo for f in collected):
-        collected.append(
-            VideoFormat(
-                formatId="bestaudio/b",
-                label="僅音訊",
-                resolution="audio",
-                ext="m4a",
-                filesizeApprox=None,
-                hasAudio=True,
-                hasVideo=False,
-                progressive=False,
-            )
-        )
+    )
 
     if not any(f.hasVideo for f in collected):
         collected.insert(
@@ -731,29 +733,40 @@ def _extract_info_raw(url: str) -> dict[str, Any]:
             if is_last or (have_hq and have_caps):
                 break
 
+            # Each extra client costs ~15-20s behind the WARP SOCKS proxy, so cap the
+            # hunt. Missing formats hurt more than missing captions, so HQ gets the
+            # longer budget; a video that genuinely has no 720p (old uploads) would
+            # otherwise burn every client looking for something that doesn't exist.
             elapsed = time.monotonic() - started
-            # Captions are a nice-to-have; HQ formats are not. Once we have usable
-            # formats, only keep hunting for captions while inside the time budget —
-            # proxied egress (WARP) makes each extra client attempt expensive.
+            caption_deadline = budget
+            hq_deadline = budget * 2
             if have_hq and not have_caps:
-                if budget and elapsed >= budget:
+                if budget and elapsed >= caption_deadline:
                     logger.info(
-                        "extract budget %ss reached after %.1fs — returning HQ formats without captions",
-                        budget,
+                        "extract budget reached after %.1fs — returning %sp without captions",
                         elapsed,
+                        best_height,
                     )
                     break
                 logger.info(
-                    "yt-dlp client %s has HQ formats but no captions — trying next (%.1fs elapsed)",
+                    "yt-dlp client %s has HQ formats but no captions — trying next (%.1fs)",
                     clients,
                     elapsed,
                 )
                 continue
             if height < 720:
+                if budget and elapsed >= hq_deadline and best_height > 0:
+                    logger.info(
+                        "extract budget reached after %.1fs — best available is %sp",
+                        elapsed,
+                        best_height,
+                    )
+                    break
                 logger.info(
-                    "yt-dlp client %s only up to %sp — trying next for HQ formats",
+                    "yt-dlp client %s only up to %sp — trying next for HQ formats (%.1fs)",
                     clients,
                     height,
+                    elapsed,
                 )
         except Exception as exc:  # noqa: BLE001
             last_error = exc
@@ -782,8 +795,8 @@ def extract_video_info(
     settings = get_settings()
     preferred = preferred_container if preferred_container in {"webm", "mp4"} else "webm"
     cache = get_ttl_cache()
-    key = f"info:{url_cache_key(cleaned, preferred)}"
-    fail_key = f"info_fail:{url_cache_key(cleaned, preferred)}"
+    key = f"info:v4:{url_cache_key(cleaned, preferred)}"
+    fail_key = f"info_fail:v4:{url_cache_key(cleaned, preferred)}"
 
     if use_cache:
         cached = cache.get_json(key)
@@ -862,6 +875,8 @@ def extract_video_info(
 def can_try_direct_delivery(mode: str, format_id: str | None) -> bool:
     """True when we can avoid proxying bytes through our server."""
     if mode != "video" or not format_id:
+        return False
+    if is_audio_mp3_format(format_id):
         return False
     # Merged / multi-format selectors need ffmpeg / local file
     if (
@@ -992,26 +1007,42 @@ def download_media(
         raise last_error or RuntimeError("字幕下載失敗")
 
     # video / audio — prefer given format_id (may already be progressive single id)
-    selected = format_id or "b"
-    if selected in {"bestaudio", "bestaudio/b"} or (
-        not any(ch.isdigit() for ch in selected.split("+")[0])
-        and "audio" in selected
-        and "bv" not in selected
-        and "bestvideo" not in selected
-    ):
-        # keep as-is
-        pass
+    wants_mp3 = is_audio_mp3_format(format_id)
+    selected = "bestaudio/b" if wants_mp3 else (format_id or "b")
 
     needs_merge = (
-        "+" in selected
-        or "/" in selected
-        or selected in {"bv*+ba/b", "bestvideo+bestaudio", "b"}
-        or "bv*" in selected
-        or "bestvideo" in selected
+        not wants_mp3
+        and (
+            "+" in selected
+            or "/" in selected
+            or selected in {"bv*+ba/b", "bestvideo+bestaudio", "b"}
+            or "bv*" in selected
+            or "bestvideo" in selected
+        )
     )
 
     def _finish_download(info: dict[str, Any], ydl: yt_dlp.YoutubeDL) -> str:
-        path = _resolve_output_path(info, ydl, preferred_ext=container)
+        preferred = "mp3" if wants_mp3 else container
+        path = _resolve_output_path(info, ydl, preferred_ext=preferred)
+        if wants_mp3:
+            if path.suffix.lower() != ".mp3":
+                # Postprocessor may leave stem.mp3 beside original; prefer mp3 sibling
+                mp3 = path.with_suffix(".mp3")
+                if mp3.exists():
+                    path = mp3
+                else:
+                    siblings = sorted(
+                        path.parent.glob(f"{path.stem}*.mp3"),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True,
+                    )
+                    if siblings:
+                        path = siblings[0]
+            if not path.exists() or path.suffix.lower() != ".mp3":
+                raise RuntimeError("MP3 轉檔失敗，請稍後再試")
+            if path.stat().st_size <= 0:
+                raise RuntimeError("MP3 檔案為空")
+            return str(path)
         expected_h = _expected_height_from_selector(selected)
         _assert_real_video_file(
             path,
@@ -1028,6 +1059,16 @@ def download_media(
             "outtmpl": outtmpl,
             "merge_output_format": container,
         }
+        if wants_mp3:
+            opts.pop("merge_output_format", None)
+            # preferredquality "0" = best VBR (yt-dlp / ffmpeg libmp3lame)
+            opts["postprocessors"] = [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "0",
+                }
+            ]
         if settings.max_filesize_bytes > 0:
             opts["max_filesize"] = settings.max_filesize_bytes
         if not needs_merge:
@@ -1231,16 +1272,21 @@ def _pick_downloaded_media(prepared: Path, *, preferred_ext: str | None = None) 
     for p in candidates:
         ext = p.suffix.lower()
         probe = _file_has_video_stream(p)
-        # Audio-only containers must lose to real video
-        if probe is False or ext in audio_exts:
+        prefer_match = bool(
+            preferred_ext and ext == f".{preferred_ext.lstrip('.').lower()}"
+        )
+        # Exact preferred container (e.g. .mp3 after FFmpegExtractAudio) wins.
+        if prefer_match:
+            kind = 0
+        elif probe is False or ext in audio_exts:
             kind = 3
         elif probe is True:
-            kind = 0
+            kind = 1
         elif ext in video_exts:
-            kind = 1  # unknown — treat as maybe video
+            kind = 2  # unknown — treat as maybe video
         else:
-            kind = 2
-        pref = 0 if (preferred_ext and ext == f".{preferred_ext.lstrip('.')}") else 1
+            kind = 4
+        pref = 0 if prefer_match else 1
         scored.append(((kind, pref, -p.stat().st_size), p))
 
     scored.sort(key=lambda x: x[0])

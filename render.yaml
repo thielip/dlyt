@@ -36,6 +36,10 @@ services:
         value: "30"
       - key: EXTRACT_BUDGET_SECONDS
         value: "20"
+      # Shared Redis cache makes a longer TTL worthwhile; YouTube format URLs
+      # stay valid for hours, so 30min of reuse is safe.
+      - key: INFO_CACHE_TTL_SECONDS
+        value: "1800"
       - key: LOG_JSON
         value: "true"
       - key: ENABLE_WARP

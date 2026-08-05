@@ -5,6 +5,7 @@ import { postPresence, type SiteStats } from "@/lib/api";
 import { useAnalyticsConsent } from "@/components/CookieConsent";
 
 const VISITOR_KEY = "zenith.visitorId";
+const PAGE_HIT_KEY = "zenith.pageHitDay";
 const HEARTBEAT_MS = 25_000;
 
 function ensureVisitorId(): string {
@@ -30,6 +31,28 @@ function clearVisitorId(): void {
   }
 }
 
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** True when this browser has not yet counted a page view today. */
+function shouldSendPageHit(visitorId: string): boolean {
+  try {
+    const stamp = sessionStorage.getItem(PAGE_HIT_KEY);
+    return stamp !== `${todayKey()}:${visitorId}`;
+  } catch {
+    return true;
+  }
+}
+
+function markPageHitSent(visitorId: string): void {
+  try {
+    sessionStorage.setItem(PAGE_HIT_KEY, `${todayKey()}:${visitorId}`);
+  } catch {
+    /* ignore */
+  }
+}
+
 function formatCount(n: number): string {
   return new Intl.NumberFormat("zh-TW").format(Math.max(0, n));
 }
@@ -47,12 +70,12 @@ export function SitePresence() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const visitorId = ensureVisitorId();
-    let pageHitPending = true;
 
     const tick = async () => {
       try {
-        const next = await postPresence(visitorId, pageHitPending);
-        pageHitPending = false;
+        const pageHit = shouldSendPageHit(visitorId);
+        const next = await postPresence(visitorId, pageHit);
+        if (pageHit) markPageHitSent(visitorId);
         if (!cancelled) setStats(next);
       } catch {
         /* retry later */

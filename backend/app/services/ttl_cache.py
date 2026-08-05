@@ -13,6 +13,7 @@ class TtlCache:
     def get_json(self, key: str) -> Any | None: ...
     def set_json(self, key: str, value: Any, ttl_seconds: int) -> None: ...
     def delete(self, key: str) -> None: ...
+    def count_keys_with_prefix(self, prefix: str) -> int: ...
 
 
 class MemoryTtlCache(TtlCache):
@@ -39,6 +40,14 @@ class MemoryTtlCache(TtlCache):
     def delete(self, key: str) -> None:
         with self._lock:
             self._data.pop(key, None)
+
+    def count_keys_with_prefix(self, prefix: str) -> int:
+        now = time.time()
+        with self._lock:
+            stale = [k for k, (exp, _) in self._data.items() if exp < now]
+            for k in stale:
+                self._data.pop(k, None)
+            return sum(1 for k in self._data if k.startswith(prefix))
 
 
 class RedisTtlCache(TtlCache):
@@ -83,6 +92,22 @@ class RedisTtlCache(TtlCache):
             self._client.delete(self._key(key))
         except Exception:
             pass
+
+    def count_keys_with_prefix(self, prefix: str) -> int:
+        if redis_degraded():
+            return self._memory.count_keys_with_prefix(prefix)
+        try:
+            pattern = f"{self._key(prefix)}*"
+            n = 0
+            # SCAN is O(N) but online set is tiny (tens of keys max)
+            for _ in self._client.scan_iter(match=pattern, count=200):
+                n += 1
+                if n % 50 == 0:
+                    note_redis_commands(1)
+            note_redis_commands(1)
+            return n
+        except Exception:
+            return self._memory.count_keys_with_prefix(prefix)
 
 
 _cache: TtlCache | None = None

@@ -143,16 +143,27 @@ def test_presence_heartbeat(monkeypatch):
 
     cache = MemoryTtlCache()
     monkeypatch.setattr(presence_mod, "get_ttl_cache", lambda: cache)
-    presence_mod._online.clear()
 
     first = presence_mod.heartbeat("visitor-aaaaaaaa", page_hit=True)
     assert first["onlineNow"] == 1
     assert first["pageViewsTotal"] == 1
     assert first["pageViewsToday"] == 1
 
-    second = presence_mod.heartbeat("visitor-aaaaaaaa", page_hit=False)
+    # Same visitor, same day — no double-count; still online
+    second = presence_mod.heartbeat("visitor-aaaaaaaa", page_hit=True)
     assert second["onlineNow"] == 1
     assert second["pageViewsTotal"] == 1
+    assert second["pageViewsToday"] == 1
+
+    # Heartbeat without page_hit keeps online
+    keep = presence_mod.heartbeat("visitor-aaaaaaaa", page_hit=False)
+    assert keep["onlineNow"] == 1
+    assert keep["pageViewsTotal"] == 1
+
+    # Phantom id (never page_hit) must NOT inflate online
+    phantom = presence_mod.heartbeat("visitor-bbbbbbbb", page_hit=False)
+    assert phantom["onlineNow"] == 1
+    assert phantom["pageViewsTotal"] == 1
 
     other = presence_mod.heartbeat("visitor-bbbbbbbb", page_hit=True)
     assert other["onlineNow"] == 2
@@ -161,6 +172,20 @@ def test_presence_heartbeat(monkeypatch):
     snap = presence_mod.snapshot()
     assert snap["onlineNow"] == 2
     assert snap["pageViewsTotal"] == 2
+
+
+def test_audio_mp3_format_helpers():
+    from app.services.ytdlp_service import (
+        AUDIO_MP3_FORMAT_ID,
+        can_try_direct_delivery,
+        is_audio_mp3_format,
+    )
+
+    assert is_audio_mp3_format(AUDIO_MP3_FORMAT_ID)
+    assert is_audio_mp3_format("bestaudio/b")
+    assert not is_audio_mp3_format("137+140")
+    assert not can_try_direct_delivery("video", AUDIO_MP3_FORMAT_ID)
+    assert can_try_direct_delivery("video", "18")
 
 
 def _fake_ydl_factory(calls, info):
@@ -204,6 +229,32 @@ def test_extract_stops_probing_clients_when_budget_exhausted(monkeypatch):
 
     assert info["id"] == "abcdefghijk"
     assert len(calls) == 1, "budget should stop after the first successful HQ attempt"
+
+
+def test_extract_stops_hunting_hq_that_does_not_exist(monkeypatch):
+    """Old low-res uploads must not burn every client looking for 720p."""
+    from app.services import ytdlp_service as svc
+
+    low_res = {
+        "id": "abcdefghijk",
+        "title": "t",
+        "formats": [{"vcodec": "avc1", "height": 240}],
+        "subtitles": {"en": [{"ext": "vtt", "url": "https://x/1"}]},
+        "automatic_captions": {},
+    }
+    calls: list = []
+    monkeypatch.setattr(svc.yt_dlp, "YoutubeDL", _fake_ydl_factory(calls, low_res))
+    monkeypatch.setattr(svc, "_store_extract_cache", lambda *a, **k: None)
+    monkeypatch.setattr(svc, "get_ttl_cache", lambda: MemoryTtlCache())
+
+    # HQ hunting gets 2x the budget, so 45s > 40s stops after the first attempt.
+    clock = iter([0.0, 45.0, 90.0, 135.0, 180.0])
+    monkeypatch.setattr(svc.time, "monotonic", lambda: next(clock))
+
+    info = svc._extract_info_raw("https://www.youtube.com/watch?v=abcdefghijk")
+
+    assert svc._max_video_height(info) == 240
+    assert len(calls) == 1
 
 
 def test_extract_keeps_probing_until_captions_found(monkeypatch):
