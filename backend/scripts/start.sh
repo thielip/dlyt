@@ -3,13 +3,13 @@
 # No NET_ADMIN / TUN required — works on restricted PaaS like Render Free.
 set -eu
 
+APP_DIR="${APP_DIR:-/app}"
 WARP_DIR="${WARP_DIR:-/tmp/warp}"
 SOCKS_ADDR="${WARP_SOCKS_ADDR:-127.0.0.1:1080}"
 ENABLE_WARP="${ENABLE_WARP:-true}"
 PORT="${PORT:-8000}"
 
 mkdir -p "$WARP_DIR"
-cd "$WARP_DIR"
 
 warp_ok=0
 
@@ -23,33 +23,26 @@ start_warp() {
     return 1
   fi
 
-  if [ ! -f wgcf-account.toml ]; then
-    echo "[warp] registering Cloudflare WARP account…"
-    # Non-interactive accept of ToS
-    wgcf register --accept-tos || {
-      echo "[warp] register failed"
-      return 1
-    }
-  fi
-
-  if [ ! -f wgcf-profile.conf ]; then
-    echo "[warp] generating WireGuard profile…"
-    wgcf generate || {
-      echo "[warp] generate failed"
-      return 1
-    }
-  fi
-
-  # wireproxy config: import wgcf profile + local SOCKS5
-  cat > wireproxy.conf <<EOF
+  (
+    cd "$WARP_DIR"
+    if [ ! -f wgcf-account.toml ]; then
+      echo "[warp] registering Cloudflare WARP account…"
+      wgcf register --accept-tos || exit 1
+    fi
+    if [ ! -f wgcf-profile.conf ]; then
+      echo "[warp] generating WireGuard profile…"
+      wgcf generate || exit 1
+    fi
+    cat > wireproxy.conf <<EOF
 WGConfig = ${WARP_DIR}/wgcf-profile.conf
 
 [Socks5]
 BindAddress = ${SOCKS_ADDR}
 EOF
+  ) || return 1
 
   echo "[warp] starting wireproxy on socks5://${SOCKS_ADDR}"
-  wireproxy -c wireproxy.conf >/tmp/wireproxy.log 2>&1 &
+  wireproxy -c "${WARP_DIR}/wireproxy.conf" >/tmp/wireproxy.log 2>&1 &
   echo $! >/tmp/wireproxy.pid
 
   # Wait until SOCKS is accepting connections
@@ -81,5 +74,6 @@ else
 fi
 
 export WARP_STATUS="$warp_ok"
-echo "[api] starting uvicorn on 0.0.0.0:${PORT}"
+cd "$APP_DIR"
+echo "[api] starting uvicorn on 0.0.0.0:${PORT} (cwd=$(pwd))"
 exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --proxy-headers
