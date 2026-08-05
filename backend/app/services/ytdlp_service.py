@@ -89,6 +89,7 @@ def _clients_need_js(clients: list[str] | None) -> bool:
 
 def _base_opts(player_clients: list[str] | None = None, *, platform: str | None = None) -> dict[str, Any]:
     clients = player_clients or PLAYER_CLIENT_FALLBACKS[0]
+    settings = get_settings()
     opts: dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
@@ -99,6 +100,13 @@ def _base_opts(player_clients: list[str] | None = None, *, platform: str | None 
         # Allow built-in extractors except the catch-all generic (SSRF-ish) one.
         "allowed_extractors": ["default", "-generic"],
     }
+
+    proxy = (settings.ytdlp_proxy or "").strip()
+    if proxy:
+        opts["proxy"] = proxy
+    else:
+        # Prefer IPv4 when going direct — some PaaS dual-stack paths are flaky.
+        opts["source_address"] = "0.0.0.0"
 
     # yt-dlp merge requires ffmpeg — pass full binary path (imageio names are not ffmpeg.exe)
     ffmpeg_bin = _resolve_ffmpeg_bin()

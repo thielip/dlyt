@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     sentry_dsn: str | None = None
     log_json: bool = True
 
+    # yt-dlp egress: socks5://127.0.0.1:1080 when Cloudflare WARP (wireproxy) is up.
+    # Empty = direct (datacenter IP; YouTube often bot-blocks). Set by start.sh or override.
+    ytdlp_proxy: str | None = None
+    enable_warp: bool = True
+
     # Zero-cost / ops guards
     maintenance_mode: bool = False
     prefer_direct_download: bool = True
@@ -62,6 +67,15 @@ class Settings(BaseSettings):
             self.sentry_dsn = None
         if self.turnstile_secret_key is not None and not self.turnstile_secret_key.strip():
             self.turnstile_secret_key = None
+        # Prefer explicit env; start.sh also exports YTDLP_PROXY for the process.
+        if self.ytdlp_proxy is not None and not self.ytdlp_proxy.strip():
+            self.ytdlp_proxy = None
+        if self.ytdlp_proxy is None:
+            import os
+
+            env_proxy = (os.environ.get("YTDLP_PROXY") or "").strip()
+            if env_proxy:
+                self.ytdlp_proxy = env_proxy
 
 
 @lru_cache

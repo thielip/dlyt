@@ -91,3 +91,6 @@ class HealthResponse(BaseModel):
     outboundLimitBytes: int | None = None
     egressExhausted: bool = False
     maintenance: bool = False
+    # Cloudflare WARP / yt-dlp proxy path (socks5 via wireproxy)
+    warp: str = "unknown"
+    ytdlpProxy: str | None = None
