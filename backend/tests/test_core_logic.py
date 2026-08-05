@@ -1,4 +1,5 @@
 from app.services.rate_limit import TokenBucket
+from app.services.ttl_cache import MemoryTtlCache
 from app.services.url_utils import (
     canonicalize_youtube_url,
     extract_video_id,
@@ -160,6 +161,72 @@ def test_presence_heartbeat(monkeypatch):
     snap = presence_mod.snapshot()
     assert snap["onlineNow"] == 2
     assert snap["pageViewsTotal"] == 2
+
+
+def _fake_ydl_factory(calls, info):
+    class _FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def extract_info(self, url, download=False):
+            calls.append(self.opts.get("extractor_args"))
+            return info
+
+    return _FakeYDL
+
+
+def test_extract_stops_probing_clients_when_budget_exhausted(monkeypatch):
+    """HQ formats without captions must not burn every player client."""
+    from app.services import ytdlp_service as svc
+
+    hq_no_captions = {
+        "id": "abcdefghijk",
+        "title": "t",
+        "formats": [{"vcodec": "avc1", "height": 1080}],
+        "subtitles": {},
+        "automatic_captions": {},
+    }
+    calls: list = []
+    monkeypatch.setattr(svc.yt_dlp, "YoutubeDL", _fake_ydl_factory(calls, hq_no_captions))
+    monkeypatch.setattr(svc, "_store_extract_cache", lambda *a, **k: None)
+    monkeypatch.setattr(svc, "get_ttl_cache", lambda: MemoryTtlCache())
+
+    clock = iter([0.0, 30.0, 60.0, 90.0, 120.0])
+    monkeypatch.setattr(svc.time, "monotonic", lambda: next(clock))
+
+    info = svc._extract_info_raw("https://www.youtube.com/watch?v=abcdefghijk")
+
+    assert info["id"] == "abcdefghijk"
+    assert len(calls) == 1, "budget should stop after the first successful HQ attempt"
+
+
+def test_extract_keeps_probing_until_captions_found(monkeypatch):
+    """Within budget we still hunt for captions across clients."""
+    from app.services import ytdlp_service as svc
+
+    with_captions = {
+        "id": "abcdefghijk",
+        "title": "t",
+        "formats": [{"vcodec": "avc1", "height": 1080}],
+        "subtitles": {"zh-TW": [{"ext": "vtt", "url": "https://x/1"}]},
+        "automatic_captions": {},
+    }
+    calls: list = []
+    monkeypatch.setattr(svc.yt_dlp, "YoutubeDL", _fake_ydl_factory(calls, with_captions))
+    monkeypatch.setattr(svc, "_store_extract_cache", lambda *a, **k: None)
+    monkeypatch.setattr(svc, "get_ttl_cache", lambda: MemoryTtlCache())
+    monkeypatch.setattr(svc.time, "monotonic", lambda: 0.0)
+
+    info = svc._extract_info_raw("https://www.youtube.com/watch?v=abcdefghijk")
+
+    assert svc._subtitle_track_count(info) == 1
+    assert len(calls) == 1, "HQ + captions on first client should stop immediately"
 
 
 def test_egress_pressure_helpers(monkeypatch):

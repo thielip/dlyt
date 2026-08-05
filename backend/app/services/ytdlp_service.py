@@ -7,6 +7,7 @@ import logging
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -693,6 +694,7 @@ def _merge_caption_fields(target: dict[str, Any], source: dict[str, Any]) -> Non
 
 def _extract_info_raw(url: str) -> dict[str, Any]:
     platform = detect_platform(url)
+    settings = get_settings()
     last_error: Exception | None = None
     best_info: dict[str, Any] | None = None
     best_clients: list[str] | None = None
@@ -700,6 +702,8 @@ def _extract_info_raw(url: str) -> dict[str, Any]:
     best_caption_info: dict[str, Any] | None = None
     best_sub_count = 0
     attempts = _ordered_client_attempts(url, platform)
+    budget = max(0, settings.extract_budget_seconds)
+    started = time.monotonic()
 
     for idx, clients in enumerate(attempts):
         opts = {
@@ -722,15 +726,27 @@ def _extract_info_raw(url: str) -> dict[str, Any]:
                 best_sub_count = sub_count
 
             is_last = idx >= len(attempts) - 1
-            # Need HQ formats; if captions still missing, keep probing other clients
             have_hq = height >= 720 or (best_height >= 720)
             have_caps = best_sub_count > 0
             if is_last or (have_hq and have_caps):
                 break
+
+            elapsed = time.monotonic() - started
+            # Captions are a nice-to-have; HQ formats are not. Once we have usable
+            # formats, only keep hunting for captions while inside the time budget —
+            # proxied egress (WARP) makes each extra client attempt expensive.
             if have_hq and not have_caps:
+                if budget and elapsed >= budget:
+                    logger.info(
+                        "extract budget %ss reached after %.1fs — returning HQ formats without captions",
+                        budget,
+                        elapsed,
+                    )
+                    break
                 logger.info(
-                    "yt-dlp client %s has HQ formats but no captions — trying next",
+                    "yt-dlp client %s has HQ formats but no captions — trying next (%.1fs elapsed)",
                     clients,
+                    elapsed,
                 )
                 continue
             if height < 720:

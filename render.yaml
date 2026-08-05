@@ -34,6 +34,8 @@ services:
         value: "7200"
       - key: RATE_LIMIT_PER_MINUTE
         value: "30"
+      - key: EXTRACT_BUDGET_SECONDS
+        value: "20"
       - key: LOG_JSON
         value: "true"
       - key: ENABLE_WARP
@@ -52,7 +54,8 @@ services:
         value: "0.92"
       - key: MAX_PROXY_HEIGHT
         value: "1080"
+      # Render Key Value has no daily command cap (unlike Upstash free ~10k/day)
       - key: REDIS_MAX_COMMANDS_PER_DAY
-        value: "8000"
+        value: "500000"
       - key: TURNSTILE_SECRET_KEY
         sync: false

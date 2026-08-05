@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     info_cache_ttl_seconds: int = 300  # reuse extract for download start (URLs stay valid)
     fail_cache_ttl_seconds: int = 45
+    # Stop probing extra player clients for captions once this many seconds elapsed.
+    # Proxied egress (WARP) makes each client attempt ~15-20s; 0 = no budget.
+    extract_budget_seconds: int = 20
 
     canary_url: str = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
     sentry_dsn: str | None = None
