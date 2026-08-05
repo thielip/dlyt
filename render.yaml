@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: dlyt-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: TMP_DIR
+        value: /tmp/dlyt
+      - key: TASK_TTL_SECONDS
+        value: "3600"
+      - key: FILE_TTL_SECONDS
+        value: "1800"
+      - key: FILE_GRACE_SECONDS
+        value: "300"
+      - key: MAX_CONCURRENT_DOWNLOADS
+        value: "2"
+      - key: MAX_ACTIVE_TASKS_PER_IP
+        value: "2"
+      - key: DOWNLOAD_TIMEOUT_SECONDS
+        value: "300"
+      - key: MAX_DURATION_SECONDS
+        value: "7200"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"
+      - key: LOG_JSON
+        value: "true"
+      - key: MAINTENANCE_MODE
+        value: "false"
+      - key: PREFER_DIRECT_DOWNLOAD
+        value: "true"
+      - key: ALLOW_PROXY_FALLBACK
+        value: "true"
+      - key: MAX_MONTHLY_OUTBOUND_BYTES
+        value: "42949672960"
+      - key: OUTBOUND_SOFT_RATIO
+        value: "0.70"
+      - key: OUTBOUND_HARD_RATIO
+        value: "0.92"
+      - key: MAX_PROXY_HEIGHT
+        value: "1080"
+      - key: REDIS_MAX_COMMANDS_PER_DAY
+        value: "8000"
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
