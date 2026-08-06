@@ -264,7 +264,13 @@ def run_download_task(task_id: str, payload: CreateDownloadRequest) -> None:
                 progress = max(5.0, min(95.0, downloaded / total * 100))
             throttler.update(progress, "正在經伺服器代理下載…")
         elif status == "finished":
-            throttler.update(96.0, "正在處理檔案…", force=True)
+            throttler.update(96.0, "音訊／影片下載完成，正在處理…", force=True)
+        elif status == "converting":
+            throttler.update(
+                float(d.get("progress") or 97.0),
+                str(d.get("message") or "正在轉成 MP3…"),
+                force=True,
+            )
 
     try:
         store.update(
@@ -331,6 +337,9 @@ async def run_download_job(task_id: str, payload: CreateDownloadRequest, ip: str
         if payload.mode == "asr"
         else settings.download_timeout_seconds
     )
+    # MP3 needs download + ffmpeg convert; Free-tier CPU is slow on long tracks.
+    if payload.mode != "asr" and ytdlp_service.is_audio_mp3_format(payload.formatId):
+        timeout = max(timeout, 1200)
     async with sem:
         try:
             await asyncio.wait_for(

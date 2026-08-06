@@ -29,7 +29,7 @@ services:
       - key: MAX_ACTIVE_TASKS_PER_IP
         value: "2"
       - key: DOWNLOAD_TIMEOUT_SECONDS
-        value: "300"
+        value: "900"
       - key: MAX_DURATION_SECONDS
         value: "7200"
       - key: RATE_LIMIT_PER_MINUTE

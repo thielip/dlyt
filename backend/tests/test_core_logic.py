@@ -188,6 +188,25 @@ def test_audio_mp3_format_helpers():
     assert can_try_direct_delivery("video", "18")
 
 
+def test_convert_audio_to_mp3_requires_source(tmp_path):
+    from app.services.ytdlp_service import _convert_audio_to_mp3
+
+    missing = tmp_path / "nope.m4a"
+    try:
+        _convert_audio_to_mp3(missing)
+        assert False, "expected failure"
+    except RuntimeError as exc:
+        assert "不存在" in str(exc) or "空" in str(exc)
+
+
+def test_convert_audio_passthrough_mp3(tmp_path):
+    from app.services.ytdlp_service import _convert_audio_to_mp3
+
+    src = tmp_path / "already.mp3"
+    src.write_bytes(b"ID3fake")
+    assert _convert_audio_to_mp3(src) == src
+
+
 def _fake_ydl_factory(calls, info):
     class _FakeYDL:
         def __init__(self, opts):

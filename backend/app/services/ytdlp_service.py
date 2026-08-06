@@ -409,9 +409,9 @@ def _collect_formats(
     size_hint = None
     if best_audio:
         size_hint = best_audio.get("filesize") or best_audio.get("filesize_approx")
-    label = "僅音訊 · MP3 · 最高音質"
+    label = "僅音訊 · MP3 · 最高音質（320kbps）"
     if abr:
-        label = f"僅音訊 · MP3 · 最高音質（來源約 {int(abr)} kbps）"
+        label = f"僅音訊 · MP3 · 最高音質（320kbps，來源約 {int(abr)} kbps）"
     collected.append(
         VideoFormat(
             formatId=AUDIO_MP3_FORMAT_ID,
@@ -1022,27 +1022,15 @@ def download_media(
     )
 
     def _finish_download(info: dict[str, Any], ydl: yt_dlp.YoutubeDL) -> str:
-        preferred = "mp3" if wants_mp3 else container
-        path = _resolve_output_path(info, ydl, preferred_ext=preferred)
         if wants_mp3:
-            if path.suffix.lower() != ".mp3":
-                # Postprocessor may leave stem.mp3 beside original; prefer mp3 sibling
-                mp3 = path.with_suffix(".mp3")
-                if mp3.exists():
-                    path = mp3
-                else:
-                    siblings = sorted(
-                        path.parent.glob(f"{path.stem}*.mp3"),
-                        key=lambda p: p.stat().st_mtime,
-                        reverse=True,
-                    )
-                    if siblings:
-                        path = siblings[0]
-            if not path.exists() or path.suffix.lower() != ".mp3":
-                raise RuntimeError("MP3 轉檔失敗，請稍後再試")
-            if path.stat().st_size <= 0:
-                raise RuntimeError("MP3 檔案為空")
-            return str(path)
+            audio_path = _resolve_audio_download_path(info, ydl)
+            return str(
+                _convert_audio_to_mp3(
+                    audio_path,
+                    progress_hook=progress_hook,
+                )
+            )
+        path = _resolve_output_path(info, ydl, preferred_ext=container)
         expected_h = _expected_height_from_selector(selected)
         _assert_real_video_file(
             path,
@@ -1059,16 +1047,10 @@ def download_media(
             "outtmpl": outtmpl,
             "merge_output_format": container,
         }
+        # MP3 is converted by us after download — do NOT use yt-dlp's FFmpegExtractAudio
+        # postprocessor (opaque hang at 96% on weak PaaS CPUs / long tracks).
         if wants_mp3:
             opts.pop("merge_output_format", None)
-            # preferredquality "0" = best VBR (yt-dlp / ffmpeg libmp3lame)
-            opts["postprocessors"] = [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "0",
-                }
-            ]
         if settings.max_filesize_bytes > 0:
             opts["max_filesize"] = settings.max_filesize_bytes
         if not needs_merge:
@@ -1079,8 +1061,9 @@ def download_media(
 
     last_error: Exception | None = None
 
-    # Reuse /api/info extract — skip second YouTube round-trip (~1s+)
-    cached_info = _get_cached_raw_info(cleaned)
+    # Skip cached-info for MP3: googlevideo URLs expire quickly (403), and the
+    # failure path left the UI stuck at 96% while every client was retried.
+    cached_info = None if wants_mp3 else _get_cached_raw_info(cleaned)
     if cached_info and mode == "video":
         clients_first = _ordered_client_attempts(cleaned, platform)[0]
         try:
@@ -1117,8 +1100,139 @@ def download_media(
                 )
             else:
                 last_error = Exception(msg) if msg != str(exc) else exc
+            # Audio already on disk + convert failed: do not burn every client again
+            if wants_mp3 and ("MP3" in msg or "轉檔" in msg):
+                break
             continue
     raise last_error or RuntimeError("下載失敗")
+
+
+def _resolve_audio_download_path(info: dict[str, Any], ydl: Any) -> Path:
+    """Locate the downloaded audio track without ffmpeg video probing."""
+    audio_exts = {".m4a", ".webm", ".opus", ".ogg", ".mp3", ".aac", ".wav"}
+
+    for key in ("filepath", "_filename"):
+        raw = info.get(key)
+        if raw:
+            p = Path(str(raw))
+            if p.exists() and p.stat().st_size > 0:
+                return p
+
+    requested = info.get("requested_downloads") or []
+    for item in requested:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("filepath") or item.get("filename")
+        if raw:
+            p = Path(str(raw))
+            if p.exists() and p.stat().st_size > 0:
+                return p
+
+    prepared = Path(ydl.prepare_filename(info))
+    if prepared.exists() and prepared.stat().st_size > 0:
+        return prepared
+
+    parent = prepared.parent
+    stem = prepared.stem
+    candidates = [
+        p
+        for p in parent.glob(f"{stem}.*")
+        if p.is_file() and p.suffix.lower() in audio_exts and p.stat().st_size > 0
+    ]
+    if not candidates:
+        candidates = [
+            p
+            for p in parent.iterdir()
+            if p.is_file() and p.suffix.lower() in audio_exts and p.stat().st_size > 0
+        ]
+    if not candidates:
+        raise FileNotFoundError("找不到下載的音訊檔")
+    candidates.sort(key=lambda p: p.stat().st_size, reverse=True)
+    return candidates[0]
+
+
+def _convert_audio_to_mp3(
+    src: Path,
+    *,
+    progress_hook=None,
+) -> Path:
+    """Convert any audio container to highest-quality MP3 (320 kbps CBR)."""
+    if not src.exists() or src.stat().st_size <= 0:
+        raise RuntimeError("音訊檔不存在或為空，無法轉成 MP3")
+
+    if src.suffix.lower() == ".mp3":
+        return src
+
+    ffmpeg = _resolve_ffmpeg_bin()
+    if not ffmpeg:
+        raise RuntimeError(
+            "找不到 ffmpeg，無法轉成 MP3。請確認伺服器已安裝 ffmpeg。"
+        )
+
+    dest = src.with_suffix(".mp3")
+    if progress_hook:
+        progress_hook(
+            {
+                "status": "converting",
+                "progress": 97.0,
+                "message": "正在轉成最高音質 MP3（320kbps）…",
+            }
+        )
+
+    # 320k CBR = highest common MP3 bitrate; much more predictable than VBR q=0
+    # on Render Free's tiny CPU (which previously looked "stuck" at 96%).
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(src),
+        "-vn",
+        "-codec:a",
+        "libmp3lame",
+        "-b:a",
+        "320k",
+        str(dest),
+    ]
+    # Allow ~1s encode budget per 40KB of source, floor 90s, cap 20min
+    timeout = max(90, min(1200, int(src.stat().st_size / 40_000) + 90))
+    try:
+        proc = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        dest.unlink(missing_ok=True)
+        raise RuntimeError(
+            "MP3 轉檔逾時（影片可能太長）。請改試較短的影片，或稍後再試。"
+        ) from exc
+    except FileNotFoundError as exc:
+        raise RuntimeError("找不到 ffmpeg，無法轉成 MP3") from exc
+
+    if proc.returncode != 0 or not dest.exists() or dest.stat().st_size <= 0:
+        err = (proc.stderr or b"").decode("utf-8", errors="ignore").strip()[:240]
+        dest.unlink(missing_ok=True)
+        raise RuntimeError(f"MP3 轉檔失敗：{err or 'ffmpeg error'}")
+
+    try:
+        if src.exists() and src.resolve() != dest.resolve():
+            src.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    if progress_hook:
+        progress_hook(
+            {
+                "status": "converting",
+                "progress": 99.0,
+                "message": "MP3 轉檔完成，正在準備下載…",
+            }
+        )
+    return dest
 
 
 def _expected_height_from_selector(format_id: str | None) -> int | None:
