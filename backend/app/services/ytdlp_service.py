@@ -7,6 +7,7 @@ import logging
 import re
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -1170,23 +1171,29 @@ def _convert_audio_to_mp3(
         )
 
     dest = src.with_suffix(".mp3")
+    src_mb = src.stat().st_size / (1024 * 1024)
     if progress_hook:
         progress_hook(
             {
                 "status": "converting",
                 "progress": 97.0,
-                "message": "正在轉成最高音質 MP3（320kbps）…",
+                "message": (
+                    f"正在轉成最高音質 MP3（320kbps，來源約 {src_mb:.1f} MB）…"
+                    "長音檔可能需要數分鐘，請稍候"
+                ),
             }
         )
 
-    # 320k CBR = highest common MP3 bitrate; much more predictable than VBR q=0
-    # on Render Free's tiny CPU (which previously looked "stuck" at 96%).
+    # 320k CBR = highest common MP3 bitrate. Heartbeat thread keeps the UI moving
+    # so long encodes don't look frozen at 97%.
     cmd = [
         ffmpeg,
         "-y",
         "-hide_banner",
         "-loglevel",
         "error",
+        "-threads",
+        "0",
         "-i",
         str(src),
         "-vn",
@@ -1198,6 +1205,35 @@ def _convert_audio_to_mp3(
     ]
     # Allow ~1s encode budget per 40KB of source, floor 90s, cap 20min
     timeout = max(90, min(1200, int(src.stat().st_size / 40_000) + 90))
+
+    stop = threading.Event()
+
+    def _heartbeat() -> None:
+        started = time.time()
+        while not stop.wait(4.0):
+            elapsed = int(time.time() - started)
+            written = ""
+            try:
+                if dest.exists():
+                    written = f"，已寫入 {dest.stat().st_size // 1024} KB"
+            except OSError:
+                pass
+            # Creep 97 → 98.5 while encoding so the bar doesn't look frozen
+            progress = min(98.5, 97.0 + elapsed / 400.0)
+            if progress_hook:
+                progress_hook(
+                    {
+                        "status": "converting",
+                        "progress": progress,
+                        "message": (
+                            f"正在轉成 MP3（320kbps），已等待 {elapsed} 秒{written}…"
+                            "尚未完成，請勿關閉頁面"
+                        ),
+                    }
+                )
+
+    beat = threading.Thread(target=_heartbeat, name="mp3-convert-beat", daemon=True)
+    beat.start()
     try:
         proc = subprocess.run(
             cmd,
@@ -1212,6 +1248,9 @@ def _convert_audio_to_mp3(
         ) from exc
     except FileNotFoundError as exc:
         raise RuntimeError("找不到 ffmpeg，無法轉成 MP3") from exc
+    finally:
+        stop.set()
+        beat.join(timeout=1.0)
 
     if proc.returncode != 0 or not dest.exists() or dest.stat().st_size <= 0:
         err = (proc.stderr or b"").decode("utf-8", errors="ignore").strip()[:240]
