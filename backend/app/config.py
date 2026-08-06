@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     max_concurrent_downloads: int = 2
     max_active_tasks_per_ip: int = 2
     download_timeout_seconds: int = 1200  # large proxy merges (4K) need longer
+    # MP3 jobs: 0 = wait indefinitely (user prefers long wait over timeout fail).
+    mp3_job_timeout_seconds: int = 0
+    # ffmpeg convert: 0 = no subprocess timeout (heartbeat still updates UI).
+    mp3_convert_timeout_seconds: int = 0
+    # Keep downloaded audio / partial MP3 for resume across retries.
+    mp3_resume_ttl_seconds: int = 24 * 3600
     info_workers: int = 4
 
     info_cache_ttl_seconds: int = 300  # reuse extract for download start (URLs stay valid)

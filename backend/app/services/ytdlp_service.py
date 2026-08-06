@@ -187,6 +187,53 @@ def download_dedupe_key(
     return f"d{digest}"
 
 
+def mp3_resume_dir(fingerprint: str) -> Path:
+    """Stable work dir so retries reuse downloaded audio / finished MP3."""
+    settings = get_settings()
+    path = Path(settings.tmp_dir) / "resume" / fingerprint
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+_AUDIO_RESUME_EXTS = {".m4a", ".webm", ".opus", ".ogg", ".aac", ".wav"}
+
+
+def find_resumable_mp3(work_dir: Path) -> Path | None:
+    if not work_dir.exists():
+        return None
+    candidates = [
+        p
+        for p in work_dir.iterdir()
+        if p.is_file()
+        and p.suffix.lower() == ".mp3"
+        and ".converting." not in p.name
+        and not p.name.endswith(".part")
+        and p.stat().st_size > 1024
+    ]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0]
+
+
+def find_resumable_audio(work_dir: Path) -> Path | None:
+    """Return best complete source audio (not .part / not final mp3)."""
+    if not work_dir.exists():
+        return None
+    candidates = [
+        p
+        for p in work_dir.iterdir()
+        if p.is_file()
+        and p.suffix.lower() in _AUDIO_RESUME_EXTS
+        and not p.name.endswith(".part")
+        and p.stat().st_size > 1024
+    ]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda p: p.stat().st_size, reverse=True)
+    return candidates[0]
+
+
 def _container_rank(fmt: dict[str, Any], preferred: str) -> int:
     """0 = matches preferred container/codecs, 1 = other."""
     ext = (fmt.get("ext") or "").lower()
@@ -1052,6 +1099,11 @@ def download_media(
         # postprocessor (opaque hang at 96% on weak PaaS CPUs / long tracks).
         if wants_mp3:
             opts.pop("merge_output_format", None)
+            # Resume partial googlevideo downloads across retries
+            opts["continuedl"] = True
+            opts["nopart"] = False
+            opts["retries"] = 10
+            opts["fragment_retries"] = 10
         if settings.max_filesize_bytes > 0:
             opts["max_filesize"] = settings.max_filesize_bytes
         if not needs_merge:
@@ -1061,6 +1113,39 @@ def download_media(
         return opts
 
     last_error: Exception | None = None
+
+    # Resume: finished MP3 or source audio already on disk (same outtmpl folder)
+    if wants_mp3:
+        work_dir = Path(outtmpl).parent
+        existing_mp3 = find_resumable_mp3(work_dir)
+        if existing_mp3:
+            logger.info("mp3 resume: reusing finished file %s", existing_mp3.name)
+            if progress_hook:
+                progress_hook(
+                    {
+                        "status": "converting",
+                        "progress": 99.0,
+                        "message": "發現已完成的 MP3，直接使用…",
+                    }
+                )
+            return str(existing_mp3)
+        existing_audio = find_resumable_audio(work_dir)
+        if existing_audio:
+            logger.info("mp3 resume: converting existing audio %s", existing_audio.name)
+            if progress_hook:
+                progress_hook(
+                    {
+                        "status": "finished",
+                        "progress": 96.0,
+                        "message": "發現已下載的音訊，略過重抓，直接轉 MP3…",
+                    }
+                )
+            return str(
+                _convert_audio_to_mp3(
+                    existing_audio,
+                    progress_hook=progress_hook,
+                )
+            )
 
     # Skip cached-info for MP3: googlevideo URLs expire quickly (403), and the
     # failure path left the UI stuck at 96% while every client was retried.
@@ -1171,7 +1256,9 @@ def _convert_audio_to_mp3(
         )
 
     dest = src.with_suffix(".mp3")
+    staging = src.with_suffix(".converting.mp3")
     src_mb = src.stat().st_size / (1024 * 1024)
+    settings = get_settings()
     if progress_hook:
         progress_hook(
             {
@@ -1201,10 +1288,15 @@ def _convert_audio_to_mp3(
         "libmp3lame",
         "-b:a",
         "320k",
-        str(dest),
+        str(staging),
     ]
-    # Allow ~1s encode budget per 40KB of source, floor 90s, cap 20min
-    timeout = max(90, min(1200, int(src.stat().st_size / 40_000) + 90))
+    # Allow ~1s encode budget per 40KB of source, floor 90s.
+    # 0 / unset mp3_convert_timeout_seconds = wait as long as needed (no hard fail).
+    configured = settings.mp3_convert_timeout_seconds
+    if configured <= 0:
+        timeout = None
+    else:
+        timeout = max(90, min(configured, int(src.stat().st_size / 40_000) + 90))
 
     stop = threading.Event()
 
@@ -1214,8 +1306,8 @@ def _convert_audio_to_mp3(
             elapsed = int(time.time() - started)
             written = ""
             try:
-                if dest.exists():
-                    written = f"，已寫入 {dest.stat().st_size // 1024} KB"
+                if staging.exists():
+                    written = f"，已寫入 {staging.stat().st_size // 1024} KB"
             except OSError:
                 pass
             # Creep 97 → 98.5 while encoding so the bar doesn't look frozen
@@ -1227,7 +1319,7 @@ def _convert_audio_to_mp3(
                         "progress": progress,
                         "message": (
                             f"正在轉成 MP3（320kbps），已等待 {elapsed} 秒{written}…"
-                            "尚未完成，請勿關閉頁面"
+                            "可安心等候，不會因逾時自動失敗"
                         ),
                     }
                 )
@@ -1242,9 +1334,10 @@ def _convert_audio_to_mp3(
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
-        dest.unlink(missing_ok=True)
+        # Keep source audio for resume; only drop incomplete staging output
+        staging.unlink(missing_ok=True)
         raise RuntimeError(
-            "MP3 轉檔逾時（影片可能太長）。請改試較短的影片，或稍後再試。"
+            "MP3 轉檔逾時。請再按一次下載——已抓到的音訊會續用，不必重下。"
         ) from exc
     except FileNotFoundError as exc:
         raise RuntimeError("找不到 ffmpeg，無法轉成 MP3") from exc
@@ -1252,10 +1345,17 @@ def _convert_audio_to_mp3(
         stop.set()
         beat.join(timeout=1.0)
 
-    if proc.returncode != 0 or not dest.exists() or dest.stat().st_size <= 0:
+    if proc.returncode != 0 or not staging.exists() or staging.stat().st_size <= 0:
         err = (proc.stderr or b"").decode("utf-8", errors="ignore").strip()[:240]
-        dest.unlink(missing_ok=True)
+        staging.unlink(missing_ok=True)
         raise RuntimeError(f"MP3 轉檔失敗：{err or 'ffmpeg error'}")
+
+    try:
+        staging.replace(dest)
+    except OSError:
+        # Fallback copy if replace fails across devices
+        dest.write_bytes(staging.read_bytes())
+        staging.unlink(missing_ok=True)
 
     try:
         if src.exists() and src.resolve() != dest.resolve():

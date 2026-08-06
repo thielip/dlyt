@@ -36,7 +36,7 @@ async def post_download(
         and body.mode == "video"
         and body.formatId
         and "+" not in body.formatId
-        and body.formatId not in {"b", "bv*+ba/b"}
+        and body.formatId not in {"b", "bv*+ba/b", "audio-mp3", "bestaudio", "bestaudio/b"}
     )
     if body.mode in {"subtitle", "asr"} or needs_proxy:
         if needs_proxy and body.mode == "video":

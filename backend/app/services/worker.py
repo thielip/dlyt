@@ -249,9 +249,24 @@ def run_download_task(task_id: str, payload: CreateDownloadRequest) -> None:
     ensure_proxy_allowed()
     ensure_outbound_budget(0)
     ensure_disk_space()
-    task_dir = Path(settings.tmp_dir) / task_id
-    task_dir.mkdir(parents=True, exist_ok=True)
-    outtmpl = str(task_dir / "%(title).80B [%(id)s].%(ext)s")
+
+    is_mp3 = ytdlp_service.is_audio_mp3_format(payload.formatId)
+    if is_mp3:
+        fingerprint = ytdlp_service.download_dedupe_key(
+            url=payload.url,
+            mode=payload.mode,
+            format_id=payload.formatId,
+            subtitle_language=payload.subtitleLanguage,
+            subtitle_format=payload.subtitleFormat,
+            container_format=payload.containerFormat,
+        )
+        work_dir = ytdlp_service.mp3_resume_dir(fingerprint)
+        outtmpl = str(work_dir / "%(title).80B [%(id)s].%(ext)s")
+    else:
+        task_dir = Path(settings.tmp_dir) / task_id
+        task_dir.mkdir(parents=True, exist_ok=True)
+        outtmpl = str(task_dir / "%(title).80B [%(id)s].%(ext)s")
+
     throttler = ProgressThrottler(task_id)
 
     def hook(d: dict) -> None:
@@ -277,7 +292,11 @@ def run_download_task(task_id: str, payload: CreateDownloadRequest) -> None:
             task_id,
             status="processing",
             progress=18,
-            message="正在準備串流（沿用已解析資訊）…",
+            message=(
+                "檢查是否有可續傳的音訊…"
+                if is_mp3
+                else "正在準備串流（沿用已解析資訊）…"
+            ),
         )
         filepath = ytdlp_service.download_media(
             url=payload.url,
@@ -315,12 +334,16 @@ def run_download_task(task_id: str, payload: CreateDownloadRequest) -> None:
         )
         logger.info("proxy download completed", extra={"task_id": task_id, "event": "proxy_ok"})
     except Exception as exc:  # noqa: BLE001
+        err = strip_ansi(str(exc))
+        hint = ""
+        if is_mp3:
+            hint = " 可再按一次下載：已抓到的音訊會續用，不必從頭重下。"
         store.update(
             task_id,
             status="failed",
             progress=100,
             message="下載失敗",
-            error=strip_ansi(str(exc)),
+            error=f"{err}{hint}",
             updated_at=time.time(),
         )
         logger.warning("download failed: %s", exc, extra={"task_id": task_id, "event": "download_fail"})
@@ -332,27 +355,42 @@ async def run_download_job(task_id: str, payload: CreateDownloadRequest, ip: str
     store.update(task_id, status="pending", message="等待下載名額…")
     sem = get_download_semaphore()
     loop = asyncio.get_running_loop()
-    timeout = (
-        settings.asr_timeout_seconds
-        if payload.mode == "asr"
-        else settings.download_timeout_seconds
-    )
-    # MP3 needs download + ffmpeg convert; Free-tier CPU is slow on long tracks.
-    if payload.mode != "asr" and ytdlp_service.is_audio_mp3_format(payload.formatId):
-        timeout = max(timeout, 1200)
+    is_mp3 = payload.mode != "asr" and ytdlp_service.is_audio_mp3_format(payload.formatId)
+    if payload.mode == "asr":
+        timeout: float | None = float(settings.asr_timeout_seconds)
+    elif is_mp3:
+        # 0 = wait indefinitely — user prefers long wait over timeout failure
+        timeout = (
+            None
+            if settings.mp3_job_timeout_seconds <= 0
+            else float(settings.mp3_job_timeout_seconds)
+        )
+    else:
+        timeout = float(settings.download_timeout_seconds)
+
     async with sem:
         try:
-            await asyncio.wait_for(
-                loop.run_in_executor(get_download_executor(), run_download_task, task_id, payload),
-                timeout=timeout,
+            fut = loop.run_in_executor(
+                get_download_executor(), run_download_task, task_id, payload
             )
+            if timeout is None:
+                await fut
+            else:
+                await asyncio.wait_for(fut, timeout=timeout)
         except asyncio.TimeoutError:
             store.update(
                 task_id,
                 status="failed",
                 progress=100,
                 message="下載逾時",
-                error=f"超過 {timeout} 秒仍未完成，請稍後再試或選直連／較低畫質",
+                error=(
+                    f"超過 {int(timeout or 0)} 秒仍未完成。"
+                    + (
+                        " 可再按一次下載：已抓到的音訊會續用。"
+                        if is_mp3
+                        else "請稍後再試或選直連／較低畫質"
+                    )
+                ),
             )
             logger.warning("download timeout", extra={"task_id": task_id, "event": "download_timeout"})
         finally:

@@ -48,13 +48,34 @@ def _cleanup_once(settings: Settings) -> None:
         if task_dir.exists():
             shutil.rmtree(task_dir, ignore_errors=True)
         if task.file_path:
-            Path(task.file_path).unlink(missing_ok=True)
+            fp = Path(task.file_path)
+            # Leave MP3 resume cache intact so retries can reuse the file
+            resume_root = (tmp_root / "resume").resolve()
+            try:
+                under_resume = resume_root in fp.resolve().parents
+            except OSError:
+                under_resume = False
+            if not under_resume:
+                fp.unlink(missing_ok=True)
         store.delete(task_id)
         logger.info("purged task %s", task_id, extra={"task_id": task_id, "event": "purge"})
 
     ttl = settings.file_ttl_seconds
+    resume_ttl = max(ttl, settings.mp3_resume_ttl_seconds)
     for child in tmp_root.iterdir():
         if not child.is_dir():
+            continue
+        # Stable MP3 resume cache — keep longer so retries can skip re-download
+        if child.name == "resume":
+            for resume_child in child.iterdir():
+                if not resume_child.is_dir():
+                    continue
+                try:
+                    mtime = resume_child.stat().st_mtime
+                except OSError:
+                    continue
+                if now - mtime > resume_ttl:
+                    shutil.rmtree(resume_child, ignore_errors=True)
             continue
         try:
             mtime = child.stat().st_mtime

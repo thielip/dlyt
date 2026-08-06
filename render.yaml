@@ -30,6 +30,13 @@ services:
         value: "2"
       - key: DOWNLOAD_TIMEOUT_SECONDS
         value: "900"
+      # 0 = no hard timeout for MP3 (resume + long wait instead of fail)
+      - key: MP3_JOB_TIMEOUT_SECONDS
+        value: "0"
+      - key: MP3_CONVERT_TIMEOUT_SECONDS
+        value: "0"
+      - key: MP3_RESUME_TTL_SECONDS
+        value: "86400"
       - key: MAX_DURATION_SECONDS
         value: "7200"
       - key: RATE_LIMIT_PER_MINUTE

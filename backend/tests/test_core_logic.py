@@ -207,6 +207,25 @@ def test_convert_audio_passthrough_mp3(tmp_path):
     assert _convert_audio_to_mp3(src) == src
 
 
+def test_mp3_resume_helpers(tmp_path):
+    from app.services.ytdlp_service import find_resumable_audio, find_resumable_mp3
+
+    assert find_resumable_mp3(tmp_path) is None
+    assert find_resumable_audio(tmp_path) is None
+
+    partial = tmp_path / "song.converting.mp3"
+    partial.write_bytes(b"x" * 5000)
+    assert find_resumable_mp3(tmp_path) is None
+
+    done = tmp_path / "song.mp3"
+    done.write_bytes(b"x" * 5000)
+    assert find_resumable_mp3(tmp_path) == done
+
+    audio = tmp_path / "song.m4a"
+    audio.write_bytes(b"y" * 8000)
+    assert find_resumable_audio(tmp_path) == audio
+
+
 def _fake_ydl_factory(calls, info):
     class _FakeYDL:
         def __init__(self, opts):
