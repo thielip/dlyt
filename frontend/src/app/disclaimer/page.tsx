@@ -14,13 +14,13 @@ export default function DisclaimerPage() {
     <main id="main-content" className="relative z-10 mx-auto flex w-full max-w-2xl flex-col gap-6 px-5 py-12 sm:px-8">
       <SecurityPattern />
       <div className="relative z-10">
-        <p className="brand-rainbow text-4xl font-extrabold tracking-tight">
+        <p className="brand-display text-4xl sm:text-5xl">
           <a href={BRAND_URL} target="_blank" rel="noopener noreferrer">
             {BRAND_NAME}
           </a>
         </p>
-        <h1 className="mt-4 text-2xl font-semibold text-[var(--ink)]">免責聲明</h1>
-        <div className="panel-glass rainbow-border mt-6 space-y-4 rounded-2xl border border-[var(--border)] p-5 text-[15px] leading-relaxed text-[var(--ink-soft)] sm:p-7">
+        <h1 className="mt-4 text-2xl font-medium text-[var(--ink)]">免責聲明</h1>
+        <div className="hairline-panel mt-6 space-y-4 border border-[var(--border)] p-5 text-[15px] leading-relaxed text-[var(--ink-soft)] sm:p-7">
           <p>
             本服務僅供個人學習與技術研究。請自行確認下載內容是否符合 YouTube
             服務條款、著作權法與當地法規。

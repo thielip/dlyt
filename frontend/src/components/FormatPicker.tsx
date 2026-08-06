@@ -29,9 +29,9 @@ function FormatOption({
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${
+      className={`flex cursor-pointer items-center justify-between gap-3 border px-4 py-3 transition-colors ${
         active
-          ? "rainbow-border border-transparent bg-[var(--surface-2)]"
+          ? "border-[var(--ink)] bg-[var(--surface-2)]"
           : "border-[var(--border)] hover:border-[var(--border-strong)]"
       } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
     >
@@ -55,7 +55,7 @@ function FormatOption({
             {format.hasVideo
               ? format.resolution
               : format.ext === "mp3"
-                ? "最高音質 MP3 · 經伺服器轉檔"
+                ? "高音質 MP3 · 經伺服器轉檔"
                 : "僅音訊"}
             {format.hasVideo && format.progressive ? " · 不經伺服器流量" : ""}
           </span>
@@ -116,7 +116,7 @@ export function FormatPicker({
         </div>
       </fieldset>
 
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+      <div className="border border-[var(--border)] bg-transparent px-4 py-3">
         <button
           type="button"
           disabled={disabled}
@@ -154,13 +154,13 @@ export function FormatPicker({
                     }}
                     placeholder="請輸入 0000"
                     disabled={disabled}
-                    className="min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--ring)]"
+                    className="min-h-10 w-full border border-[var(--border)] bg-transparent px-3 text-sm text-[var(--ink)] outline-none focus:border-[var(--ink)]"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={disabled || !password}
-                  className="btn-ink inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-45"
+                  className="btn-ink inline-flex min-h-10 items-center justify-center px-4 text-sm font-medium disabled:opacity-45"
                 >
                   解鎖
                 </button>

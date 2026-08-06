@@ -5,7 +5,6 @@ const base = () =>
 
 type Stats = {
   onlineNow: number;
-  pageViewsToday: number;
   pageViewsTotal: number;
 };
 
@@ -14,8 +13,6 @@ declare global {
     | {
         online: Map<string, number>;
         total: number;
-        day: string;
-        today: number;
       }
     | undefined;
 }
@@ -23,20 +20,14 @@ declare global {
 function localSnapshot(): Stats {
   const store = globalThis.__zenithPresence;
   if (!store) {
-    return { onlineNow: 0, pageViewsToday: 0, pageViewsTotal: 0 };
+    return { onlineNow: 0, pageViewsTotal: 0 };
   }
   const now = Date.now();
   for (const [id, seen] of store.online) {
     if (now - seen > 50_000) store.online.delete(id);
   }
-  const day = new Date().toISOString().slice(0, 10);
-  if (store.day !== day) {
-    store.day = day;
-    store.today = 0;
-  }
   return {
     onlineNow: store.online.size,
-    pageViewsToday: store.today,
     pageViewsTotal: store.total,
   };
 }
@@ -53,7 +44,10 @@ export async function GET() {
     });
     const data = (await res.json().catch(() => null)) as Stats | null;
     if (res.ok && data && typeof data.pageViewsTotal === "number") {
-      return NextResponse.json(data);
+      return NextResponse.json({
+        onlineNow: data.onlineNow,
+        pageViewsTotal: data.pageViewsTotal,
+      });
     }
     return NextResponse.json(localSnapshot());
   } catch {

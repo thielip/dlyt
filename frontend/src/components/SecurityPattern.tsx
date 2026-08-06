@@ -1,5 +1,5 @@
 /**
- * Minimal decorative backdrop — no blur/filter (cheap first paint).
+ * Quiet gallery grid + circle — atmosphere without noise.
  */
 export function SecurityPattern() {
   return (

@@ -59,18 +59,17 @@ export function TrafficExhaustedModal({
       }}
     >
       <div
-        className="w-full max-w-xl rounded-3xl border-2 border-[var(--accent)] bg-[var(--surface-solid)] px-6 py-10 text-center shadow-[var(--shadow)] sm:px-10 sm:py-12"
+        className="w-full max-w-xl border border-[var(--ink)] bg-[var(--surface-solid)] px-6 py-10 text-center sm:px-10 sm:py-12"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        <p className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--accent)]">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
           巔峰思維 · 流量告急
         </p>
         <h2
           id={titleId}
-          className="mt-4 text-3xl font-black leading-tight tracking-tight text-[var(--ink)] sm:text-5xl"
-          style={{ fontFamily: "var(--font-display)" }}
+          className="brand-display mt-4 text-3xl leading-tight sm:text-5xl"
         >
           免費流量已使用完畢
         </h2>
@@ -90,7 +89,7 @@ export function TrafficExhaustedModal({
           ref={closeRef}
           type="button"
           onClick={onDismiss}
-          className="btn-ink mt-8 inline-flex min-h-14 w-full items-center justify-center rounded-2xl px-6 text-lg font-bold sm:w-auto sm:min-w-[220px]"
+          className="btn-ink mt-8 inline-flex min-h-12 w-full items-center justify-center px-6 text-sm font-medium uppercase tracking-[0.12em] sm:w-auto sm:min-w-[200px]"
         >
           我知道了
         </button>

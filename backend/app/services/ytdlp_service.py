@@ -457,9 +457,9 @@ def _collect_formats(
     size_hint = None
     if best_audio:
         size_hint = best_audio.get("filesize") or best_audio.get("filesize_approx")
-    label = "僅音訊 · MP3 · 最高音質（320kbps）"
+    label = "僅音訊 · MP3 · 高音質（短片 320kbps／超長 192kbps）"
     if abr:
-        label = f"僅音訊 · MP3 · 最高音質（320kbps，來源約 {int(abr)} kbps）"
+        label = f"僅音訊 · MP3 · 高音質（來源約 {int(abr)} kbps）"
     collected.append(
         VideoFormat(
             formatId=AUDIO_MP3_FORMAT_ID,
@@ -1072,10 +1072,16 @@ def download_media(
     def _finish_download(info: dict[str, Any], ydl: yt_dlp.YoutubeDL) -> str:
         if wants_mp3:
             audio_path = _resolve_audio_download_path(info, ydl)
+            dur = info.get("duration")
+            try:
+                duration_s = int(dur) if dur is not None else None
+            except (TypeError, ValueError):
+                duration_s = None
             return str(
                 _convert_audio_to_mp3(
                     audio_path,
                     progress_hook=progress_hook,
+                    duration_seconds=duration_s,
                 )
             )
         path = _resolve_output_path(info, ydl, preferred_ext=container)
@@ -1102,8 +1108,11 @@ def download_media(
             # Resume partial googlevideo downloads across retries
             opts["continuedl"] = True
             opts["nopart"] = False
-            opts["retries"] = 10
-            opts["fragment_retries"] = 10
+            opts["retries"] = 15
+            opts["fragment_retries"] = 30
+            # Long VOD through WARP often stalls; 20s is too aggressive for 5h audio
+            opts["socket_timeout"] = 90
+            opts["concurrent_fragment_downloads"] = 1
         if settings.max_filesize_bytes > 0:
             opts["max_filesize"] = settings.max_filesize_bytes
         if not needs_merge:
@@ -1241,8 +1250,11 @@ def _convert_audio_to_mp3(
     src: Path,
     *,
     progress_hook=None,
+    duration_seconds: int | None = None,
 ) -> Path:
-    """Convert any audio container to highest-quality MP3 (320 kbps CBR)."""
+    """Convert any audio container to high-quality MP3 (320k short / 192k long)."""
+    from app.services.disk import free_bytes
+
     if not src.exists() or src.stat().st_size <= 0:
         raise RuntimeError("音訊檔不存在或為空，無法轉成 MP3")
 
@@ -1257,22 +1269,34 @@ def _convert_audio_to_mp3(
 
     dest = src.with_suffix(".mp3")
     staging = src.with_suffix(".converting.mp3")
-    src_mb = src.stat().st_size / (1024 * 1024)
+    src_size = src.stat().st_size
+    src_mb = src_size / (1024 * 1024)
     settings = get_settings()
+
+    # Keep source for resume; need room for staging MP3 (~same order as source)
+    need = src_size + 64 * 1024 * 1024
+    available = free_bytes()
+    if available < need:
+        raise RuntimeError(
+            f"暫存空間不足（需要約 {need // (1024 * 1024)} MB，目前剩 "
+            f"{available // (1024 * 1024)} MB）。已保留已下載音訊，稍後再按一次可續轉。"
+        )
+
+    # Long tracks: 192k still high quality, ~40% less disk/RAM peak than 320k
+    long_track = src_mb > 150 or (duration_seconds is not None and duration_seconds > 7200)
+    bitrate = "192k" if long_track else "320k"
     if progress_hook:
         progress_hook(
             {
                 "status": "converting",
                 "progress": 97.0,
                 "message": (
-                    f"正在轉成最高音質 MP3（320kbps，來源約 {src_mb:.1f} MB）…"
+                    f"正在轉成高音質 MP3（{bitrate}，來源約 {src_mb:.1f} MB）…"
                     "長音檔可能需要數分鐘，請稍候"
                 ),
             }
         )
 
-    # 320k CBR = highest common MP3 bitrate. Heartbeat thread keeps the UI moving
-    # so long encodes don't look frozen at 97%.
     cmd = [
         ffmpeg,
         "-y",
@@ -1287,7 +1311,7 @@ def _convert_audio_to_mp3(
         "-codec:a",
         "libmp3lame",
         "-b:a",
-        "320k",
+        bitrate,
         str(staging),
     ]
     # Allow ~1s encode budget per 40KB of source, floor 90s.
@@ -1318,7 +1342,7 @@ def _convert_audio_to_mp3(
                         "status": "converting",
                         "progress": progress,
                         "message": (
-                            f"正在轉成 MP3（320kbps），已等待 {elapsed} 秒{written}…"
+                            f"正在轉成 MP3（{bitrate}），已等待 {elapsed} 秒{written}…"
                             "可安心等候，不會因逾時自動失敗"
                         ),
                     }

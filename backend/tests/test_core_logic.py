@@ -147,31 +147,25 @@ def test_presence_heartbeat(monkeypatch):
     first = presence_mod.heartbeat("visitor-aaaaaaaa", page_hit=True)
     assert first["onlineNow"] == 1
     assert first["pageViewsTotal"] == 1
-    assert first["pageViewsToday"] == 1
 
-    # Same visitor, same day — no double-count; still online
+    # Same visitor, F5 again — cumulative +1 (e-aboard style)
     second = presence_mod.heartbeat("visitor-aaaaaaaa", page_hit=True)
     assert second["onlineNow"] == 1
-    assert second["pageViewsTotal"] == 1
-    assert second["pageViewsToday"] == 1
+    assert second["pageViewsTotal"] == 2
 
-    # Heartbeat without page_hit keeps online
+    # Heartbeat without page_hit keeps online, no extra view
     keep = presence_mod.heartbeat("visitor-aaaaaaaa", page_hit=False)
     assert keep["onlineNow"] == 1
-    assert keep["pageViewsTotal"] == 1
-
-    # Phantom id (never page_hit) must NOT inflate online
-    phantom = presence_mod.heartbeat("visitor-bbbbbbbb", page_hit=False)
-    assert phantom["onlineNow"] == 1
-    assert phantom["pageViewsTotal"] == 1
+    assert keep["pageViewsTotal"] == 2
 
     other = presence_mod.heartbeat("visitor-bbbbbbbb", page_hit=True)
     assert other["onlineNow"] == 2
-    assert other["pageViewsTotal"] == 2
+    assert other["pageViewsTotal"] == 3
 
     snap = presence_mod.snapshot()
     assert snap["onlineNow"] == 2
-    assert snap["pageViewsTotal"] == 2
+    assert snap["pageViewsTotal"] == 3
+    assert "pageViewsToday" not in snap
 
 
 def test_audio_mp3_format_helpers():

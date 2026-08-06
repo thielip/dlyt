@@ -61,12 +61,12 @@ export function ProgressPanel({ task, onReset }: ProgressPanelProps) {
 
   return (
     <div
-      className={`rounded-xl border px-4 py-4 sm:px-5 ${
+      className={`border px-4 py-4 sm:px-5 ${
         done
-          ? "border-[var(--success)]/35 bg-[var(--success-soft)]"
+          ? "border-[var(--success)] bg-[var(--success-soft)]"
           : failed
-            ? "border-[var(--accent)]/35 bg-[var(--accent-soft)]"
-            : "rainbow-border border-transparent bg-[var(--surface-2)]"
+            ? "border-[var(--border-strong)] bg-[var(--accent-soft)]"
+            : "border-[var(--border)] bg-transparent"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -105,11 +105,11 @@ export function ProgressPanel({ task, onReset }: ProgressPanelProps) {
       </div>
 
       <div
-        className="mt-3 h-2.5 overflow-hidden rounded-full"
+        className="mt-3 h-[2px] overflow-hidden"
         style={{ background: "var(--track)" }}
       >
         <div
-          className={`h-full rounded-full transition-[width] duration-500 ease-out ${
+          className={`h-full transition-[width] duration-500 ease-out ${
             done
               ? "bg-[var(--success)]"
               : failed
@@ -125,7 +125,7 @@ export function ProgressPanel({ task, onReset }: ProgressPanelProps) {
           <button
             type="button"
             onClick={() => triggerBrowserDownload(task)}
-            className="btn-float inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm"
+            className="btn-float inline-flex min-h-10 items-center justify-center px-4 text-sm"
           >
             {isDirect ? "再次開啟直連下載" : "再次下載檔案"}
             {task.filename ? ` · ${task.filename}` : ""}
@@ -135,7 +135,7 @@ export function ProgressPanel({ task, onReset }: ProgressPanelProps) {
           <button
             type="button"
             onClick={onReset}
-            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[var(--border-strong)] bg-transparent px-4 text-sm font-semibold text-[var(--ink)] transition-colors hover:bg-[var(--surface-2)]"
+            className="inline-flex min-h-10 items-center justify-center border border-[var(--border-strong)] bg-transparent px-4 text-sm font-medium text-[var(--ink)] transition-colors hover:bg-[var(--accent-soft)]"
           >
             再選一次
           </button>

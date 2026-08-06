@@ -42,16 +42,16 @@ export function CookieConsent() {
       aria-modal="false"
       aria-labelledby={titleId}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-solid)] p-4 shadow-[var(--shadow)] sm:flex-row sm:items-center sm:gap-6 sm:p-5">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 border border-[var(--border-strong)] bg-[var(--surface-solid)] p-4 sm:flex-row sm:items-center sm:gap-6 sm:p-5">
         <div className="min-w-0 flex-1 text-sm leading-relaxed text-[var(--ink-soft)]">
-          <p id={titleId} className="font-semibold text-[var(--ink)]">
+          <p id={titleId} className="font-medium tracking-wide text-[var(--ink)]">
             Cookie 與本機儲存說明
           </p>
           <p className="mt-1.5">
             我們使用必要的本機儲存（例如主題偏好）以維持網站運作。若您同意，也會使用匿名訪客識別碼統計瀏覽與線上人數。詳見{" "}
             <Link
               href="/privacy"
-              className="font-semibold text-[var(--accent)] underline underline-offset-2"
+              className="font-medium text-[var(--ink)] underline underline-offset-2"
             >
               隱私權政策
             </Link>
@@ -62,14 +62,14 @@ export function CookieConsent() {
           <button
             type="button"
             onClick={() => choose("essential")}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] px-4 text-sm font-semibold text-[var(--ink)]"
+            className="inline-flex min-h-11 items-center justify-center border border-[var(--border-strong)] bg-transparent px-4 text-sm font-medium text-[var(--ink)]"
           >
             僅必要功能
           </button>
           <button
             type="button"
             onClick={() => choose("accepted")}
-            className="btn-float inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm"
+            className="btn-float inline-flex min-h-11 items-center justify-center px-4 text-sm"
           >
             全部允許
           </button>

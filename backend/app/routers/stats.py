@@ -13,7 +13,6 @@ class PresenceBody(BaseModel):
 
 class StatsResponse(BaseModel):
     onlineNow: int
-    pageViewsToday: int
     pageViewsTotal: int
 
 

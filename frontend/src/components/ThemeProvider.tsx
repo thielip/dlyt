@@ -29,9 +29,9 @@ function applyTheme(theme: Theme) {
 function readTheme(): Theme {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === "light" || stored === "dark" ? stored : "dark";
+    return stored === "light" || stored === "dark" ? stored : "light";
   } catch {
-    return "dark";
+    return "light";
   }
 }
 
@@ -48,7 +48,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme: Theme = useSyncExternalStore(
     subscribeTheme,
     readTheme,
-    (): Theme => "dark",
+    (): Theme => "light",
   );
 
   useEffect(() => {

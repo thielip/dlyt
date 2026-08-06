@@ -5,15 +5,12 @@ const base = () =>
 
 type Stats = {
   onlineNow: number;
-  pageViewsToday: number;
   pageViewsTotal: number;
 };
 
 type LocalStore = {
   online: Map<string, number>;
   total: number;
-  day: string;
-  today: number;
 };
 
 declare global {
@@ -25,32 +22,27 @@ function localStore(): LocalStore {
     globalThis.__zenithPresence = {
       online: new Map(),
       total: 0,
-      day: new Date().toISOString().slice(0, 10),
-      today: 0,
     };
   }
   return globalThis.__zenithPresence;
 }
 
-function localHeartbeat(visitorId: string, pageHit: boolean): Stats {
-  const store = localStore();
-  const now = Date.now();
-  const day = new Date().toISOString().slice(0, 10);
-  if (store.day !== day) {
-    store.day = day;
-    store.today = 0;
-  }
-  store.online.set(visitorId, now);
+function pruneOnline(store: LocalStore, now: number) {
   for (const [id, seen] of store.online) {
     if (now - seen > 50_000) store.online.delete(id);
   }
+}
+
+function localHeartbeat(visitorId: string, pageHit: boolean): Stats {
+  const store = localStore();
+  const now = Date.now();
+  store.online.set(visitorId, now);
+  pruneOnline(store, now);
   if (pageHit) {
     store.total += 1;
-    store.today += 1;
   }
   return {
     onlineNow: store.online.size,
-    pageViewsToday: store.today,
     pageViewsTotal: store.total,
   };
 }
@@ -88,9 +80,11 @@ export async function POST(request: Request) {
     });
     const data = (await res.json().catch(() => null)) as Stats | null;
     if (res.ok && data && typeof data.pageViewsTotal === "number") {
-      return NextResponse.json(data);
+      return NextResponse.json({
+        onlineNow: data.onlineNow,
+        pageViewsTotal: data.pageViewsTotal,
+      });
     }
-    // Backend missing/old — fall back so counters still work in local UI
     return NextResponse.json(localHeartbeat(visitorId, pageHit));
   } catch {
     return NextResponse.json(localHeartbeat(visitorId, pageHit));

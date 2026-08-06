@@ -98,7 +98,6 @@ export async function fetchHealth(): Promise<HealthInfo> {
 
 export interface SiteStats {
   onlineNow: number;
-  pageViewsToday: number;
   pageViewsTotal: number;
 }
 

@@ -26,10 +26,10 @@ export function ModeSwitch({ mode, onChange, disabled }: ModeSwitchProps) {
             type="button"
             disabled={disabled}
             onClick={() => onChange(option.value)}
-            className={`rounded-xl border px-4 py-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               active
-                ? "rainbow-border border-transparent bg-[var(--accent-soft)]"
-                : "border-[var(--border)] bg-[var(--surface-2)] hover:border-[var(--border-strong)]"
+                ? "border-[var(--ink)] bg-[var(--accent-soft)]"
+                : "border-[var(--border)] bg-transparent hover:border-[var(--border-strong)]"
             }`}
           >
             <span className="block text-[15px] font-semibold text-[var(--ink)]">

@@ -19,17 +19,17 @@ export default function PrivacyPage() {
     >
       <SecurityPattern />
       <div className="relative z-10">
-        <p className="brand-rainbow text-4xl font-extrabold tracking-tight">
+        <p className="brand-display text-4xl sm:text-5xl">
           <a href={BRAND_URL} target="_blank" rel="noopener noreferrer">
             {BRAND_NAME}
           </a>
         </p>
-        <h1 className="mt-4 text-2xl font-semibold text-[var(--ink)]">
+        <h1 className="mt-4 text-2xl font-medium text-[var(--ink)]">
           隱私權政策
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">最後更新日期：{updated}</p>
 
-        <div className="panel-glass rainbow-border mt-6 space-y-5 rounded-2xl border border-[var(--border)] p-5 text-[15px] leading-relaxed text-[var(--ink-soft)] sm:p-7">
+        <div className="hairline-panel mt-6 space-y-5 border border-[var(--border)] p-5 text-[15px] leading-relaxed text-[var(--ink-soft)] sm:p-7">
           <section>
             <h2 className="text-base font-semibold text-[var(--ink)]">1. 總則</h2>
             <p className="mt-2">

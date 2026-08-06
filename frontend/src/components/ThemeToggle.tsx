@@ -11,14 +11,14 @@ export function ThemeToggle() {
       type="button"
       className="theme-toggle"
       onClick={toggleTheme}
-      aria-label={isDark ? "切換為白色風格" : "切換為黑色風格"}
+      aria-label={isDark ? "切換為淺色美術館" : "切換為深色展廳"}
       aria-pressed={isDark}
-      title={isDark ? "切換白色風格" : "切換黑色風格"}
+      title={isDark ? "淺色美術館" : "深色展廳"}
     >
       <span className="theme-toggle-knob" aria-hidden>
-        {isDark ? "暗" : "亮"}
+        {isDark ? "夜" : "晝"}
       </span>
-      <span className="sr-only">{isDark ? "目前：黑色風格" : "目前：白色風格"}</span>
+      <span className="sr-only">{isDark ? "目前：深色展廳" : "目前：淺色美術館"}</span>
     </button>
   );
 }

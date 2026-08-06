@@ -31,7 +31,7 @@ const VideoPreview = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="slot-preview rounded-xl bg-[var(--track)]" aria-hidden />
+      <div className="slot-preview bg-[var(--track)]" aria-hidden />
     ),
   },
 );
@@ -42,7 +42,7 @@ const FormatPicker = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-[8rem] rounded-xl bg-[var(--track)]" aria-hidden />
+      <div className="min-h-[8rem] bg-[var(--track)]" aria-hidden />
     ),
   },
 );
@@ -53,7 +53,7 @@ const SubtitlePicker = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-[8rem] rounded-xl bg-[var(--track)]" aria-hidden />
+      <div className="min-h-[8rem] bg-[var(--track)]" aria-hidden />
     ),
   },
 );
@@ -64,7 +64,7 @@ const ProgressPanel = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="slot-progress rounded-xl bg-[var(--track)]" aria-hidden />
+      <div className="slot-progress bg-[var(--track)]" aria-hidden />
     ),
   },
 );
@@ -207,6 +207,8 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     const taskId = task.taskId;
+    const MAX_POLL_FAILURES = 5;
+    let pollFailures = 0;
 
     const poll = async () => {
       if (cancelled) return;
@@ -214,6 +216,7 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
       try {
         const next = await getTaskProgress(taskId);
         if (cancelled) return;
+        pollFailures = 0;
         setTask(next);
         asrBusy =
           next.message.includes("Gemini") ||
@@ -230,8 +233,13 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
         }
       } catch (e) {
         if (cancelled) return;
-        setPhase("error");
-        setError(e instanceof Error ? e.message : "無法取得任務狀態");
+        pollFailures += 1;
+        if (pollFailures >= MAX_POLL_FAILURES) {
+          setPhase("error");
+          setError(e instanceof Error ? e.message : "無法取得任務狀態");
+          return;
+        }
+        timer = setTimeout(poll, Math.min(8000, 1000 * pollFailures));
         return;
       }
 
@@ -378,14 +386,14 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
       </div>
 
       <section
-        className="panel-glass rainbow-border rounded-2xl border border-[var(--border)] p-5 sm:p-7"
+        className="hairline-panel border border-[var(--border)] p-5 sm:p-7"
         aria-busy={phase === "loading-info" || phase === "downloading"}
       >
         {egressExhausted && (
           <button
             type="button"
             onClick={() => setShowEgressModal(true)}
-            className="mb-4 w-full rounded-xl border-2 border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-4 text-left"
+            className="mb-4 w-full border border-[var(--ink)] bg-[var(--accent-soft)] px-4 py-4 text-left"
           >
             <p className="text-lg font-black text-[var(--accent-deep)] sm:text-xl">
               免費流量已使用完畢
@@ -396,12 +404,12 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
           </button>
         )}
         {info?.bandwidthPressure === "soft" && (
-          <div className="mb-4 rounded-xl border border-[var(--warn)]/30 bg-[color-mix(in_srgb,var(--warn)_12%,transparent)] px-4 py-3 text-sm text-[var(--ink-soft)]">
+          <div className="mb-4 border border-[var(--warn)]/30 bg-[color-mix(in_srgb,var(--warn)_12%,transparent)] px-4 py-3 text-sm text-[var(--ink-soft)]">
             本月伺服器代理流量偏高，已隱藏部分高畫質。請優先選「直連」畫質或字幕。
           </div>
         )}
         {info?.bandwidthPressure === "hard" && (
-          <div className="mb-4 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--accent-deep)]">
+          <div className="mb-4 border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--accent-deep)]">
             本月代理流量吃緊：僅保留直連畫質／字幕。若直連失敗，請稍後再試或下個月再下載高畫質。
           </div>
         )}
@@ -419,7 +427,7 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="貼上 YT／FB／IG 影片網址…"
-              className="min-h-12 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 text-[15px] text-[var(--ink)] outline-none transition-[border-color,box-shadow] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:shadow-[0_0_0_4px_var(--ring)]"
+              className="min-h-12 flex-1 border border-[var(--border)] bg-transparent px-4 text-[15px] text-[var(--ink)] outline-none transition-[border-color] placeholder:text-[var(--muted)] focus:border-[var(--ink)]"
               autoComplete="off"
               spellCheck={false}
               aria-invalid={urlInvalid}
@@ -428,12 +436,12 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
             <button
               type="submit"
               disabled={phase === "loading-info"}
-              className="btn-float inline-flex min-h-12 items-center justify-center rounded-xl px-6 text-[15px] disabled:cursor-not-allowed disabled:opacity-60"
+              className="btn-float inline-flex min-h-12 items-center justify-center px-6 text-[13px] uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {phase === "loading-info" ? (
                 <span className="inline-flex items-center gap-2">
                   <span
-                    className="spinner inline-block h-4 w-4 rounded-full border-2 border-black/25 border-t-black"
+                    className="spinner inline-block h-4 w-4 rounded-full border-2 border-[var(--muted)] border-t-[var(--ink)]"
                     aria-hidden
                   />
                   解析中
@@ -492,7 +500,7 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
                 type="button"
                 onClick={handleDownload}
                 disabled={downloadDisabled}
-                className="btn-ink inline-flex min-h-12 w-full items-center justify-center rounded-xl px-6 text-[15px] font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto sm:self-start"
+                className="btn-ink inline-flex min-h-12 w-full items-center justify-center px-6 text-[13px] font-medium uppercase tracking-[0.12em] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto sm:self-start"
               >
                 {mode === "video"
                   ? "開始下載影片"
@@ -514,7 +522,7 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
           {error && (
             <div
               role="alert"
-              className="mt-5 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--accent-deep)]"
+              className="mt-5 border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--accent-deep)]"
             >
               {error}
             </div>

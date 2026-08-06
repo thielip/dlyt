@@ -35,7 +35,7 @@ export function VideoPreview({ info }: VideoPreviewProps) {
 
   return (
     <div className="slot-preview flex flex-col gap-4 sm:flex-row sm:items-start">
-      <div className="rainbow-border relative aspect-video w-full overflow-hidden rounded-xl border border-transparent bg-[var(--bg-deep)] sm:w-56 sm:shrink-0">
+      <div className="relative aspect-video w-full overflow-hidden border border-[var(--hairline)] bg-[var(--bg-deep)] sm:w-56 sm:shrink-0">
         {useOptimized ? (
           <Image
             src={info.thumbnail}
@@ -59,7 +59,7 @@ export function VideoPreview({ info }: VideoPreviewProps) {
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <h2 className="text-lg font-semibold leading-snug tracking-tight text-[var(--ink)]">
+        <h2 className="font-[family-name:var(--font-display)] text-xl font-medium leading-snug tracking-tight text-[var(--ink)] sm:text-2xl">
           {info.title}
         </h2>
         <p className="mt-1.5 text-sm text-[var(--ink-soft)]">{info.channel}</p>

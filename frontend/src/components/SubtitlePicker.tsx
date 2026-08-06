@@ -46,7 +46,7 @@ export function SubtitlePicker({
   if (tracks.length === 0) {
     return (
       <div className="flex flex-col gap-5">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4 text-sm text-[var(--ink-soft)]">
+        <div className="border border-[var(--border)] bg-transparent px-4 py-4 text-sm text-[var(--ink-soft)]">
           <p className="font-semibold text-[var(--ink)]">這支影片沒有可用字幕</p>
           <p className="mt-2 leading-relaxed text-[var(--muted)]">
             YouTube 未提供可下載的字幕軌（含自動產生字幕）。畫面上的歌詞或燒錄字幕無法抓取。
@@ -57,7 +57,7 @@ export function SubtitlePicker({
               type="button"
               disabled={disabled}
               onClick={onSwitchToVideo}
-              className="btn-ink mt-4 inline-flex min-h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
+              className="btn-ink mt-4 inline-flex min-h-10 items-center justify-center px-4 text-sm font-medium disabled:opacity-50"
             >
               改為下載影片
             </button>
@@ -83,7 +83,7 @@ export function SubtitlePicker({
               value={geminiApiKey}
               onChange={(e) => onGeminiApiKeyChange(e.target.value)}
               placeholder="貼上你的 Google AI Studio API Key"
-              className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 text-[15px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:shadow-[0_0_0_4px_var(--ring)]"
+              className="min-h-11 w-full border border-[var(--border)] bg-transparent px-4 text-[15px] text-[var(--ink)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--ink)]"
             />
             <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
               金鑰只用於本次請求呼叫 Google Gemini，不會存進資料庫。可至{" "}
@@ -107,9 +107,9 @@ export function SubtitlePicker({
                 return (
                   <label
                     key={item.value}
-                    className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                    className={`flex cursor-pointer items-center gap-2 border px-3 py-2.5 text-sm ${
                       active
-                        ? "rainbow-border border-transparent bg-[var(--surface-2)]"
+                        ? "border-[var(--ink)] bg-[var(--surface-2)]"
                         : "border-[var(--border)]"
                     }`}
                   >
@@ -136,9 +136,9 @@ export function SubtitlePicker({
                 return (
                   <label
                     key={item.value}
-                    className={`flex cursor-pointer flex-col rounded-xl border px-4 py-3 ${
+                    className={`flex cursor-pointer flex-col border px-4 py-3 ${
                       active
-                        ? "rainbow-border border-transparent bg-[var(--accent-soft)]"
+                        ? "border-[var(--ink)] bg-[var(--accent-soft)]"
                         : "border-[var(--border)]"
                     }`}
                   >
@@ -178,9 +178,9 @@ export function SubtitlePicker({
             return (
               <label
                 key={track.language}
-                className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                className={`flex cursor-pointer items-center gap-3 border px-4 py-3 transition-colors ${
                   active
-                    ? "rainbow-border border-transparent bg-[var(--surface-2)]"
+                    ? "border-[var(--ink)] bg-[var(--surface-2)]"
                     : "border-[var(--border)] hover:border-[var(--border-strong)]"
                 } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
               >
@@ -217,9 +217,9 @@ export function SubtitlePicker({
             return (
               <label
                 key={item.value}
-                className={`flex cursor-pointer flex-col rounded-xl border px-4 py-3 transition-colors ${
+                className={`flex cursor-pointer flex-col border px-4 py-3 transition-colors ${
                   active
-                    ? "rainbow-border border-transparent bg-[var(--accent-soft)]"
+                    ? "border-[var(--ink)] bg-[var(--accent-soft)]"
                     : "border-[var(--border)] hover:border-[var(--border-strong)]"
                 } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
               >
