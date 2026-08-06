@@ -224,6 +224,29 @@ def test_mp3_resume_helpers(tmp_path):
     assert find_resumable_audio(tmp_path) is None
 
 
+def test_mp3_resume_does_not_shadow_path(tmp_path, monkeypatch):
+    """Regression: local `from pathlib import Path` inside download_media
+    made Path unbound on the MP3 resume branch (UnboundLocalError)."""
+    from app.services import ytdlp_service
+
+    work = tmp_path / "resume"
+    work.mkdir()
+    done = work / "clip [abc123].mp3"
+    done.write_bytes(b"x" * 5000)
+    outtmpl = str(work / "%(title)s [%(id)s].%(ext)s")
+
+    monkeypatch.setattr(ytdlp_service, "validate_url", lambda u: u)
+    monkeypatch.setattr(ytdlp_service, "detect_platform", lambda u: "youtube")
+
+    result = ytdlp_service.download_media(
+        url="https://www.youtube.com/watch?v=jNQXAC9IVRw",
+        outtmpl=outtmpl,
+        mode="video",
+        format_id="audio-mp3",
+    )
+    assert result == str(done)
+
+
 def _fake_ydl_factory(calls, info):
     class _FakeYDL:
         def __init__(self, opts):

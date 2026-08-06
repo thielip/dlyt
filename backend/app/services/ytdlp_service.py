@@ -1038,8 +1038,6 @@ def download_media(
                     )
                     filepath = (sub or {}).get("filepath")
                     if not filepath:
-                        from pathlib import Path
-
                         parent = Path(outtmpl).parent
                         stem = Path(ydl.prepare_filename(info)).stem
                         matches = list(parent.glob(f"{stem}*.{requested}")) + list(
@@ -1160,7 +1158,7 @@ def download_media(
                 _convert_audio_to_mp3(
                     existing_audio,
                     progress_hook=progress_hook,
-                    duration_seconds=duration_s,
+                    duration_seconds=None,
                 )
             )
 
@@ -1643,8 +1641,6 @@ def download_audio_only(
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(cleaned, download=True)
                 filepath = ydl.prepare_filename(info)
-                from pathlib import Path
-
                 path = Path(filepath)
                 if path.exists():
                     return str(path)
