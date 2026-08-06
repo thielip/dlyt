@@ -216,8 +216,12 @@ def test_mp3_resume_helpers(tmp_path):
     assert find_resumable_mp3(tmp_path) == done
 
     audio = tmp_path / "song.m4a"
-    audio.write_bytes(b"y" * 8000)
+    audio.write_bytes(b"y" * (40 * 1024))
     assert find_resumable_audio(tmp_path) == audio
+
+    # Sibling .part means incomplete download — do not resume-convert
+    (tmp_path / "song.m4a.part").write_bytes(b"z" * 100)
+    assert find_resumable_audio(tmp_path) is None
 
 
 def _fake_ydl_factory(calls, info):

@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -16,6 +17,27 @@ from app.services.worker import create_pending_task, run_download_job
 from app.services.ytdlp_service import download_dedupe_key, extract_video_info, validate_url
 
 router = APIRouter(prefix="/api", tags=["download"])
+
+# Stuck jobs after OOM / deploy should not block retries forever.
+_STALE_PENDING_SECONDS = 120
+_STALE_PROCESSING_SECONDS = 600
+
+
+def _task_still_reusable(existing) -> bool:
+    if existing is None:
+        return False
+    if existing.status == "completed":
+        return True
+    if existing.status not in {"pending", "processing"}:
+        return False
+    now = time.time()
+    updated = float(existing.updated_at or existing.created_at or 0)
+    age = now - updated if updated else now
+    if existing.status == "pending" and age > _STALE_PENDING_SECONDS:
+        return False
+    if existing.status == "processing" and age > _STALE_PROCESSING_SECONDS:
+        return False
+    return True
 
 
 @router.post("/download", response_model=CreateDownloadResponse)
@@ -88,7 +110,7 @@ async def post_download(
         existing_id = store.get_dedupe(fingerprint)
         if existing_id:
             existing = store.get(existing_id)
-            if existing and existing.status in {"pending", "processing", "completed"}:
+            if _task_still_reusable(existing):
                 return CreateDownloadResponse(taskId=existing_id)
     else:
         fingerprint = None

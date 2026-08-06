@@ -1,19 +1,33 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, DM_Sans } from "next/font/google";
+import { Cormorant_Garamond, IBM_Plex_Sans, Source_Sans_3, Space_Grotesk } from "next/font/google";
 import { CookieConsent } from "@/components/CookieConsent";
 import "./globals.css";
 
-const display = Cormorant_Garamond({
+const techDisplay = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-display-face",
+  weight: ["500", "600", "700"],
+  variable: "--font-tech-display",
   display: "swap",
 });
 
-const body = DM_Sans({
+const techBody = IBM_Plex_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-body-face",
+  variable: "--font-tech-body",
+  display: "swap",
+});
+
+const louvreDisplay = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-louvre-display",
+  display: "swap",
+});
+
+const louvreBody = Source_Sans_3({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-louvre-body",
   display: "swap",
 });
 
@@ -66,20 +80,21 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f2f1ef" },
-    { media: "(prefers-color-scheme: dark)", color: "#0a0a0b" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f5f0" },
+    { media: "(prefers-color-scheme: dark)", color: "#070b12" },
   ],
-  colorScheme: "light dark",
+  colorScheme: "dark light",
 };
 
 const themeBootScript = `
 (function(){
   try {
     var t = localStorage.getItem('dlyt-theme');
-    if (t !== 'light' && t !== 'dark') t = 'light';
+    if (t === 'dark' || t === 'light') t = t === 'dark' ? 'tech' : 'louvre';
+    if (t !== 'tech' && t !== 'louvre') t = 'tech';
     document.documentElement.setAttribute('data-theme', t);
   } catch (e) {
-    document.documentElement.setAttribute('data-theme', 'light');
+    document.documentElement.setAttribute('data-theme', 'tech');
   }
 })();
 `;
@@ -88,9 +103,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="zh-Hant"
-      data-theme="light"
+      data-theme="tech"
       suppressHydrationWarning
-      className={`h-full antialiased ${display.variable} ${body.variable}`}
+      className={`h-full antialiased ${techDisplay.variable} ${techBody.variable} ${louvreDisplay.variable} ${louvreBody.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />

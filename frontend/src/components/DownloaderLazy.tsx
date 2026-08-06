@@ -38,7 +38,7 @@ function DownloaderLazyInner() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">
-          Archive tool
+          下載工具
         </p>
         <ThemeToggle />
       </div>
@@ -60,7 +60,7 @@ function DownloaderLazyInner() {
             htmlFor={inputId}
             className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--muted)]"
           >
-            Media URL
+            影片網址
           </label>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
             <input

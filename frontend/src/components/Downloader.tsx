@@ -207,7 +207,7 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     const taskId = task.taskId;
-    const MAX_POLL_FAILURES = 5;
+    const MAX_POLL_FAILURES = 15;
     let pollFailures = 0;
 
     const poll = async () => {
@@ -221,7 +221,9 @@ export function Downloader({ initialUrl = "" }: { initialUrl?: string }) {
         asrBusy =
           next.message.includes("Gemini") ||
           next.message.includes("辨識") ||
-          next.message.includes("已等待");
+          next.message.includes("已等待") ||
+          next.message.includes("轉成") ||
+          next.message.includes("續");
         if (next.status === "completed") {
           setPhase("done");
           return;

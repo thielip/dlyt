@@ -220,13 +220,20 @@ def find_resumable_audio(work_dir: Path) -> Path | None:
     """Return best complete source audio (not .part / not final mp3)."""
     if not work_dir.exists():
         return None
+    # Incomplete yt-dlp downloads leave sibling .part files — skip those stems.
+    part_stems = {
+        p.name[: -len(".part")]
+        for p in work_dir.iterdir()
+        if p.is_file() and p.name.endswith(".part")
+    }
     candidates = [
         p
         for p in work_dir.iterdir()
         if p.is_file()
         and p.suffix.lower() in _AUDIO_RESUME_EXTS
         and not p.name.endswith(".part")
-        and p.stat().st_size > 1024
+        and p.name not in part_stems
+        and p.stat().st_size > 32 * 1024
     ]
     if not candidates:
         return None
@@ -457,7 +464,7 @@ def _collect_formats(
     size_hint = None
     if best_audio:
         size_hint = best_audio.get("filesize") or best_audio.get("filesize_approx")
-    label = "僅音訊 · MP3 · 高音質（短片 320kbps／超長 192kbps）"
+    label = "僅音訊 · MP3 · 高音質（短片 320kbps／長片 192kbps）"
     if abr:
         label = f"僅音訊 · MP3 · 高音質（來源約 {int(abr)} kbps）"
     collected.append(
@@ -1153,6 +1160,7 @@ def download_media(
                 _convert_audio_to_mp3(
                     existing_audio,
                     progress_hook=progress_hook,
+                    duration_seconds=duration_s,
                 )
             )
 
@@ -1273,18 +1281,29 @@ def _convert_audio_to_mp3(
     src_mb = src_size / (1024 * 1024)
     settings = get_settings()
 
-    # Keep source for resume; need room for staging MP3 (~same order as source)
-    need = src_size + 64 * 1024 * 1024
+    if duration_seconds is None or duration_seconds <= 0:
+        duration_seconds = _probe_audio_duration_seconds(src)
+
+    # Long tracks: 192k still high quality, less disk/RAM peak than 320k
+    # (>1h or large source — free PaaS disks are tight)
+    long_track = src_mb > 100 or (
+        duration_seconds is not None and duration_seconds > 3600
+    )
+    bitrate_k = 192 if long_track else 320
+    bitrate = f"{bitrate_k}k"
+
+    # Keep source for resume; need room for staging MP3 + margin
+    if duration_seconds and duration_seconds > 0:
+        est_mp3 = int(bitrate_k * 1000 / 8 * duration_seconds)
+    else:
+        est_mp3 = int(src_size * (1.15 if long_track else 1.35))
+    need = src_size + est_mp3 + 64 * 1024 * 1024
     available = free_bytes()
     if available < need:
         raise RuntimeError(
             f"暫存空間不足（需要約 {need // (1024 * 1024)} MB，目前剩 "
             f"{available // (1024 * 1024)} MB）。已保留已下載音訊，稍後再按一次可續轉。"
         )
-
-    # Long tracks: 192k still high quality, ~40% less disk/RAM peak than 320k
-    long_track = src_mb > 150 or (duration_seconds is not None and duration_seconds > 7200)
-    bitrate = "192k" if long_track else "320k"
     if progress_hook:
         progress_hook(
             {
@@ -1408,6 +1427,32 @@ def _expected_height_from_selector(format_id: str | None) -> int | None:
     if m:
         return int(m.group(1))
     return None
+
+
+def _probe_audio_duration_seconds(path: Path) -> int | None:
+    """Best-effort duration from ffmpeg -i stderr (no separate ffprobe)."""
+    ffmpeg = _resolve_ffmpeg_bin()
+    if not ffmpeg or not path.exists():
+        return None
+    try:
+        proc = subprocess.run(
+            [ffmpeg, "-hide_banner", "-i", str(path)],
+            capture_output=True,
+            timeout=45,
+            check=False,
+        )
+        probe = (proc.stderr or b"").decode("utf-8", errors="ignore")
+        m = re.search(
+            r"Duration:\s*(\d+):(\d{2}):(\d{2})(?:\.(\d+))?",
+            probe,
+            flags=re.I,
+        )
+        if not m:
+            return None
+        hours, minutes, seconds = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return hours * 3600 + minutes * 60 + seconds
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _probe_video_height(path: Path) -> int | None:

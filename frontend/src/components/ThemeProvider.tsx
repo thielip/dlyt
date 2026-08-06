@@ -9,7 +9,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
-export type Theme = "dark" | "light";
+export type Theme = "tech" | "louvre";
 
 const STORAGE_KEY = "dlyt-theme";
 const THEME_EVENT = "dlyt-theme-change";
@@ -22,16 +22,23 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+function normalizeTheme(raw: string | null): Theme {
+  if (raw === "tech" || raw === "louvre") return raw;
+  // Migrate previous dual theme keys
+  if (raw === "dark") return "tech";
+  if (raw === "light") return "louvre";
+  return "tech";
+}
+
 function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme);
 }
 
 function readTheme(): Theme {
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored === "light" || stored === "dark" ? stored : "light";
+    return normalizeTheme(window.localStorage.getItem(STORAGE_KEY));
   } catch {
-    return "light";
+    return "tech";
   }
 }
 
@@ -48,7 +55,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme: Theme = useSyncExternalStore(
     subscribeTheme,
     readTheme,
-    (): Theme => "light",
+    (): Theme => "tech",
   );
 
   useEffect(() => {
@@ -62,7 +69,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
+    setTheme(theme === "tech" ? "louvre" : "tech");
   }, [setTheme, theme]);
 
   const value = useMemo(

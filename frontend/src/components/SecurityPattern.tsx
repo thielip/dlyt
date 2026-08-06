@@ -1,5 +1,5 @@
 /**
- * Quiet gallery grid + circle — atmosphere without noise.
+ * Atmosphere backdrop — tech grid / Louvre court lines.
  */
 export function SecurityPattern() {
   return (

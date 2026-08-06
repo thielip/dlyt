@@ -4,21 +4,21 @@ import { useTheme } from "./ThemeProvider";
 
 export function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+  const isLouvre = theme === "louvre";
 
   return (
     <button
       type="button"
       className="theme-toggle"
       onClick={toggleTheme}
-      aria-label={isDark ? "切換為淺色美術館" : "切換為深色展廳"}
-      aria-pressed={isDark}
-      title={isDark ? "淺色美術館" : "深色展廳"}
+      aria-label={isLouvre ? "切換為科技風格" : "切換為羅浮宮風格"}
+      aria-pressed={isLouvre}
+      title={isLouvre ? "科技風格" : "羅浮宮風格"}
     >
-      <span className="theme-toggle-knob" aria-hidden>
-        {isDark ? "夜" : "晝"}
+      <span aria-hidden>{isLouvre ? "Louvre" : "Tech"}</span>
+      <span className="sr-only">
+        {isLouvre ? "目前：羅浮宮風格" : "目前：科技風格"}
       </span>
-      <span className="sr-only">{isDark ? "目前：深色展廳" : "目前：淺色美術館"}</span>
     </button>
   );
 }
